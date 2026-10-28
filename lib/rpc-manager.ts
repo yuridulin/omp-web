@@ -28,7 +28,7 @@ import {
   type AgentToolSessionOps,
 } from "./agent-tools";
 import { markShuttingDown, recordRunningSessions, RESUME_PROMPT, takeInterruptedSessions } from "./session-resume";
-import { PRESET_FULL } from "./tool-presets";
+import { PRESET_FULL } from "../core/tool-presets";
 import { comparableProjectPath } from "./comparable-path";
 import { samePath } from "./paths";
 import { isRecord } from "./type-guards";
@@ -1058,7 +1058,7 @@ export class AgentSessionWrapper {
     }
     // Blocking dialogs stay pending until the client answers (replayed to
     // newly-attached SSE listeners so dialogs survive reconnects).
-    if (BLOCKING_UI_METHODS.has(method)) {
+    if (Object.hasOwn(BLOCKING_UI_METHODS, method)) {
       this.forgetPendingUiRequest(id);
       const timeout = typeof event.timeout === "number" ? event.timeout : undefined;
       if (timeout && timeout > 0) {

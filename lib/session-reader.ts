@@ -31,7 +31,7 @@ import type { TodoPhase } from "./pi-types";
 import { projectIdentityKey, sessionPathKey } from "./paths";
 import { resolveProject, type ProjectInfo } from "./worktree";
 import { selectHistoryRange, type SessionHistoryCursor, type SessionHistoryPage } from "./session-sync";
-import { PASSIVE_TOOL_CONTEXT } from "./chat-transcript-plan";
+import { PASSIVE_TOOL_CONTEXT } from "../core/display";
 
 export { getAgentDir };
 

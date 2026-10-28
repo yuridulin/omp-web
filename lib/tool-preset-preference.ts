@@ -1,4 +1,4 @@
-import { isToolPreset, type ToolPreset } from "./tool-presets";
+import { isToolPreset, type ToolPreset } from "../core/tool-presets";
 
 const STORAGE_KEY = "omp-web:tool-preset";
 

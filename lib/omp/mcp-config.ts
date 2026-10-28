@@ -2,7 +2,7 @@ import { execFileSync } from "child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "fs";
 import { homedir } from "os";
 import { basename, dirname, join, relative, resolve, sep } from "path";
-import { stripAnsi } from "../ansi";
+import { stripAnsi } from "../../core/display";
 import { getAgentDir } from "./paths";
 import { isRecord } from "../type-guards";
 

@@ -9,7 +9,7 @@ import {
   searchField,
   TITLE_WEIGHT,
   type SearchField,
-} from "./session-search";
+} from "../core/search";
 export const MAX_CONTENT_CACHE_ENTRIES = 200;
 
 interface ContentCacheEntry {
