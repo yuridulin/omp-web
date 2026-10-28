@@ -5,7 +5,7 @@ import type {
   CustomMessage,
   ThinkingContent,
   ToolResultMessage,
-} from "@/lib/types";
+} from "./types";
 
 /**
  * Display planning for a committed transcript.

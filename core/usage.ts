@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@/lib/types";
+import type { AgentMessage } from "./types";
 import { isRecord } from "./guards";
 
 /**

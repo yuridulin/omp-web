@@ -6,7 +6,7 @@ import type {
   SessionTitleSource,
   SessionTreeNode,
   ToolCallContent,
-} from "@/lib/types";
+} from "./types";
 import { PASSIVE_TOOL_CONTEXT } from "./display";
 import { asNumber, asString, isRecord } from "./guards";
 import { todoPhasesFromEntries, type TodoPhase } from "./todos";

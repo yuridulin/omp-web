@@ -1,4 +1,4 @@
-import type { AgentMessage, UserMessage } from "@/lib/types";
+import type { AgentMessage, UserMessage } from "./types";
 import {
   isTerminalAgentEnd,
   readAssistantPayload,

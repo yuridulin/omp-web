@@ -1,4 +1,4 @@
-import type { AgentMessage, UserMessage } from "@/lib/types";
+import type { AgentMessage, UserMessage } from "./types";
 import { branchReducer, initialBranching, type BranchingState } from "./branching";
 import { type ChatIntent, isLocalIntent, toFrame } from "./commands";
 import { EMPTY_DRAFT, isDraftEmpty, parseDraft, serializeDraft, type Draft } from "./drafts";

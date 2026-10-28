@@ -1,4 +1,4 @@
-import type { AgentMessage, AssistantMessage, ToolResultMessage, UserMessage } from "@/lib/types";
+import type { AgentMessage, AssistantMessage, ToolResultMessage, UserMessage } from "./types";
 
 /**
  * Framework-free session model.

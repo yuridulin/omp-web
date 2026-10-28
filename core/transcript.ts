@@ -1,4 +1,4 @@
-import type { AgentMessage, AssistantContentBlock, TextContent } from "@/lib/types";
+import type { AgentMessage, AssistantContentBlock, TextContent } from "./types";
 
 /**
  * Markdown export for a session transcript: User/Assistant sections, thinking

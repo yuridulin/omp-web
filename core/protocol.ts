@@ -1,4 +1,4 @@
-import type { AssistantMessage, ToolResultMessage } from "@/lib/types";
+import type { AssistantMessage, ToolResultMessage } from "./types";
 import { isRecord } from "./guards";
 import type { QueueSnapshot } from "./state";
 
