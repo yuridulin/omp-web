@@ -41,3 +41,4 @@ export * from "./coalescer";
 export * from "./session";
 export * from "./session-list";
 export * from "./event-stream";
+export * from "./rpc-frame";
