@@ -17,3 +17,5 @@ export * from "./slash";
 export * from "./web-commands";
 export * from "./ports";
 export type { FrameCursor, WireEvent } from "./protocol";
+export * from "./urls";
+export * from "./extensions";
