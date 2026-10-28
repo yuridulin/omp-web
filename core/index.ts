@@ -29,6 +29,7 @@ export * from "./display";
 export * from "./search";
 export * from "./btw";
 export * from "./notifications";
+export * from "./notification-routing";
 export * from "./prediction";
 export * from "./attachments";
 export * from "./preferences";
