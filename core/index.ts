@@ -21,3 +21,4 @@ export * from "./urls";
 export * from "./extensions";
 export * from "./subagents";
 export * from "./models";
+export * from "./catalog";
