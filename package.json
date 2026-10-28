@@ -1,7 +1,7 @@
 {
   "name": "@kahme247/ompweb",
   "version": "0.6.0",
-  "description": "Framework-free omp client core and Node host",
+  "description": "Framework-free omp client core, Node host and minimal HTTP API",
   "homepage": "https://github.com/kahme247/ompweb#readme",
   "repository": {
     "type": "git",
@@ -16,23 +16,27 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --test core/*.test.mjs lib/*.test.mjs lib/omp/*.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "node --experimental-strip-types server/index.ts",
+    "dev": "node --experimental-strip-types server/index.ts"
   },
   "dependencies": {
     "sharp": "^0.35.4",
     "undici": "8.10.1",
     "web-push": "^3.6.7",
-    "yaml": "^2"
+    "yaml": "^2",
+    "jiti": "^2.7.0",
+    "mammoth": "^1.12.2"
   },
   "devDependencies": {
     "@types/node": "^25",
     "@types/web-push": "^3.6.4",
-    "typescript": "^5",
-    "jiti": "^2.7.0"
+    "typescript": "^5"
   },
   "files": [
     "core",
     "lib",
+    "server",
     "README.md",
     "LICENSE"
   ],
@@ -40,5 +44,6 @@
     ".": "./core/index.ts",
     "./core": "./core/index.ts",
     "./lib/*": "./lib/*.ts"
-  }
+  },
+  "type": "module"
 }

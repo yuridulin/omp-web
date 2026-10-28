@@ -1,12 +1,12 @@
 # omp-web core
 
 Framework-free TypeScript logic for an [omp](https://github.com/oh-my-pi/oh-my-pi)
-client, plus the Node adapters that talk to the `omp` binary and its session
-files. There is no React, no DOM framework and no HTTP server here: a front end
-(or a CLI, or a test) drives the core through plain data and ports.
+client, the Node host that drives `omp --mode rpc-ui` and its session files,
+and a minimal HTTP server that exposes the host over the same `/api/*` routes
+the previous web app used.
 
-The previous Next.js/React web app was removed; its non-UI logic remains under
-`lib/`, and the client-facing domain logic lives in `core/`.
+There is no React, no Next.js and no UI framework. A future client can talk to
+the HTTP API or import the core directly.
 
 ## Layout
 
@@ -17,10 +17,25 @@ core/   pure TypeScript: no React, DOM, fetch, storage, timers or Node imports
         and lists, history paging, RPC framing, routing
 lib/    Node host layer: omp process + NDJSON transport, session file IO,
         model/MCP/settings config, usage, media, notifications, skills, STT
+server/ plain node:http server; routes are the former Next.js handlers with
+        next/server replaced by server/http.ts (NextResponse.json/NextRequest)
 ```
 
 `core/types.ts` and `core/pi-types.ts` hold the shared omp shapes. `core/index.ts`
 is the single public barrel.
+
+## Run
+
+```
+npm start                 # http://127.0.0.1:30178
+OMP_WEB_HOST=0.0.0.0 OMP_WEB_PORT=8080 npm start
+```
+
+Endpoints include `/api/sessions*`, `/api/agent/*`, `/api/events` (multiplexed
+SSE), `/api/files/*`, `/api/git/*`, `/api/worktrees`, `/api/projects*`,
+`/api/models*`, `/api/mcp`, `/api/skills`, `/api/notifications/*`, `/api/stt*`
+and `/api/media/*`. The server binds loopback by default and has no password
+gate; put it behind a reverse proxy if it is exposed.
 
 ## Development
 
@@ -29,4 +44,4 @@ npm test          # node:test + jiti, no build step
 npm run typecheck # tsc --noEmit
 ```
 
-Requires Node.js 24+ (tests use `--experimental-strip-types`).
+Requires Node.js 24+ (tests and the server use `--experimental-strip-types`).
