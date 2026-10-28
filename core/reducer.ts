@@ -34,6 +34,7 @@ export type SessionAction =
   | { type: "prompt-settled"; accepted: boolean; reason?: string; at: number }
   | { type: "notice"; notice: Notice }
   | { type: "dismiss-notice"; id: string }
+  | { type: "view"; view: Partial<SessionState["view"]> }
   | { type: "reset"; sessionId: string | null };
 
 export function reduce(state: SessionState, action: SessionAction): SessionState {
@@ -60,10 +61,18 @@ export function reduce(state: SessionState, action: SessionAction): SessionState
       return pushNotice(state, action.notice);
     case "dismiss-notice":
       return { ...state, notices: state.notices.filter((notice) => notice.id !== action.id) };
+    case "view":
+      return {
+        ...state,
+        view: { ...state.view, ...action.view },
+        // A different branch or compaction window is a different transcript.
+        historyRevision: state.historyRevision + 1,
+      };
     case "reset":
       return {
         ...state,
         sessionId: action.sessionId,
+        view: { leafId: null, includePreCompaction: false },
         messages: [],
         entryIds: [],
         optimistic: null,

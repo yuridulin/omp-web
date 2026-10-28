@@ -29,10 +29,11 @@ export interface AgentCommand {
   [key: string]: unknown;
 }
 
-export interface DraftStore {
-  read(sessionId: string): string | null;
+/** Raw draft persistence; the core parses and serializes, the host stores. */
+export interface DraftStorage {
+  read(sessionId: string): unknown;
   write(sessionId: string, value: string): void;
-  clear(sessionId: string): void;
+  remove(sessionId: string): void;
 }
 
 export interface Clock {

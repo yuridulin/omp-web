@@ -30,6 +30,12 @@ export interface QueueState extends QueueSnapshot {
   revision: number;
 }
 
+/** Which branch of the session tree the reader is looking at. */
+export interface SessionView {
+  leafId: string | null;
+  includePreCompaction: boolean;
+}
+
 export interface RunState {
   status: "idle" | "running";
   /** Monotonic id of the current or last run, for stale-response rejection. */
@@ -57,6 +63,7 @@ export interface SessionState {
   /** Last applied `web.sequence` for `streamId`. */
   sequence: number;
   run: RunState;
+  view: SessionView;
   /** Committed transcript, as last read from the session store. */
   messages: AgentMessage[];
   entryIds: string[];
@@ -85,6 +92,7 @@ export function initialState(sessionId: string | null = null): SessionState {
     streamId: null,
     sequence: 0,
     run: { status: "idle", id: 0, hadContent: false, error: null },
+    view: { leafId: null, includePreCompaction: false },
     messages: [],
     entryIds: [],
     optimistic: null,
