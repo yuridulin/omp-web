@@ -1,42 +1,75 @@
-import { Suspense } from "react";
-import { headers } from "next/headers";
-import { AppShell } from "@/components/AppShell";
-import { getInstallName } from "@/lib/install-name";
+"use client";
 
-export default async function Home() {
-  const appName = getInstallName(await headers());
-  return (
-    <Suspense fallback={<RouteLoadingFallback />}>
-      <AppShell appName={appName} />
-    </Suspense>
-  );
+import { useEffect, useState } from "react";
+
+interface SessionInfo {
+  id: string;
+  name?: string;
+  cwd: string;
+  modified?: string;
+  messageCount?: number;
 }
 
-function RouteLoadingFallback() {
+interface SessionsResponse {
+  sessions?: SessionInfo[];
+  error?: string;
+}
+
+/**
+ * Wiring probe: the rebuilt UI starts here. It talks only to the retained
+ * /api surface (sessions index + omp binary probe) so the mechanical link to
+ * the installed CLI stays observable while the presentation layer is written
+ * from scratch.
+ */
+export default function Home() {
+  const [state, setState] = useState<{ version: string | null; sessions: SessionInfo[]; error: string | null }>({
+    version: null,
+    sessions: [],
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [versionResponse, sessionsResponse] = await Promise.all([
+          fetch("/api/omp-version", { cache: "no-store" }),
+          fetch("/api/sessions", { cache: "no-store" }),
+        ]);
+        const version = (await versionResponse.json()) as { version?: string | null };
+        const sessions = (await sessionsResponse.json()) as SessionsResponse;
+        if (cancelled) return;
+        setState({
+          version: version.version ?? null,
+          sessions: sessions.sessions ?? [],
+          error: sessions.error ?? null,
+        });
+      } catch (error) {
+        if (!cancelled) setState({ version: null, sessions: [], error: String(error) });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <div className="route-fallback" role="status" aria-busy="true" aria-label="Loading omp web">
-      <aside className="route-fallback-sidebar" aria-hidden="true">
-        <div className="skeleton route-fallback-sidebar-title" />
-        <div className="skeleton route-fallback-sidebar-button" />
-        <div className="route-fallback-sidebar-list">
-          <div className="skeleton route-fallback-sidebar-row" />
-          <div className="skeleton route-fallback-sidebar-row" />
-          <div className="skeleton route-fallback-sidebar-row" />
-        </div>
-      </aside>
-      <main className="route-fallback-main" aria-hidden="true">
-        <div className="route-fallback-topbar">
-          <div className="skeleton route-fallback-topbar-control" />
-          <div className="skeleton route-fallback-topbar-title" />
-          <div className="skeleton route-fallback-topbar-control" />
-        </div>
-        <div className="route-fallback-content">
-          <div className="skeleton route-fallback-line route-fallback-line-short" />
-          <div className="skeleton route-fallback-line" />
-          <div className="skeleton route-fallback-line" />
-          <div className="skeleton route-fallback-composer" />
-        </div>
-      </main>
-    </div>
+    <main>
+      <h1>omp</h1>
+      <p>
+        omp binary: <code>{state.version ?? "—"}</code>
+      </p>
+      <p>
+        sessions: <code>{state.sessions.length}</code>
+      </p>
+      {state.error ? <p>error: {state.error}</p> : null}
+      <ul>
+        {state.sessions.slice(0, 20).map((session) => (
+          <li key={session.id}>
+            {session.name ?? session.id} — {session.cwd}
+          </li>
+        ))}
+      </ul>
+    </main>
   );
 }
