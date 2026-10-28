@@ -38,3 +38,5 @@ export * from "./fork";
 export * from "./compaction";
 export * from "./transcript";
 export * from "./coalescer";
+export * from "./session";
+export * from "./event-stream";

@@ -9,6 +9,10 @@ const {
   advanceFloors,
   emptyFloors,
   classifyEvent,
+  historyCursor,
+  parseHistoryCursor,
+  selectHistoryRange,
+  paginateContext,
 } = await jiti.import("./history");
 
 const user = (text) => ({ role: "user", content: text });
@@ -195,4 +199,100 @@ test("user messages are never treated as assistant streaming", () => {
   assert.equal(classifyEvent({ type: "message_update", message: { role: "assistant" } }).family, "message");
   assert.equal(classifyEvent({ type: "agent_end" }).family, "lifecycle");
   assert.equal(classifyEvent({ type: "tool_execution_start", toolCallId: "x" }).family, "tool");
+});
+
+function pageContext(ids) {
+  return {
+    messages: ids.map(() => ({ role: "assistant", content: [{ type: "text", text: "Repeated answer" }], model: "test", provider: "test" })),
+    entryIds: ids,
+    thinkingLevel: "high",
+    model: { provider: "test", modelId: "test" },
+    todoPhases: [],
+  };
+}
+
+test("catch-up returns only entries after the confirmed cursor, including identical messages", () => {
+  const saved = pageContext(["a", "b", "c"]);
+  const page = paginateContext(saved, historyCursor(pageContext(["a"])), 200);
+  assert.equal(page.mode, "append");
+  assert.equal(page.baseEntryId, "a");
+  assert.deepEqual(page.context.entryIds, ["b", "c"]);
+  assert.deepEqual(page.context.messages, [saved.messages[1], saved.messages[2]]);
+  assert.deepEqual(page.cursor, { firstEntryId: "a", lastEntryId: "c" });
+  assert.equal(page.hasMore, false);
+  assert.equal(page.context.thinkingLevel, "high");
+});
+
+test("pages remain contiguous while new entries are appended", () => {
+  const initial = paginateContext(pageContext(["a", "b", "c", "d"]), null, 2);
+  assert.equal(initial.mode, "replace");
+  assert.deepEqual(initial.context.entryIds, ["a", "b"]);
+  assert.equal(initial.hasMore, true);
+  const next = paginateContext(pageContext(["a", "b", "c", "d", "e"]), initial.cursor, 2);
+  const last = paginateContext(pageContext(["a", "b", "c", "d", "e"]), next.cursor, 2);
+  assert.deepEqual(
+    [...initial.context.entryIds, ...next.context.entryIds, ...last.context.entryIds],
+    ["a", "b", "c", "d", "e"],
+  );
+  assert.equal(next.mode, "append");
+  assert.equal(last.hasMore, false);
+});
+
+test("an orphaned branch cursor or a changed prefix replaces history", () => {
+  const orphan = paginateContext(pageContext(["root", "other"]), historyCursor(pageContext(["root", "old-branch"])));
+  assert.equal(orphan.mode, "replace");
+  assert.deepEqual(orphan.context.entryIds, ["root", "other"]);
+  assert.equal(orphan.baseEntryId, null);
+
+  const compacted = paginateContext(pageContext(["summary", "kept", "new"]), historyCursor(pageContext(["old", "kept"])));
+  assert.equal(compacted.mode, "replace");
+  assert.deepEqual(compacted.context.entryIds, ["summary", "kept", "new"]);
+});
+
+test("an unchanged context returns an empty delta and retains its cursor", () => {
+  const cursor = historyCursor(pageContext(["a", "b"]));
+  const page = paginateContext(pageContext(["a", "b"]), cursor);
+  assert.equal(page.mode, "append");
+  assert.deepEqual(page.context.messages, []);
+  assert.deepEqual(page.context.entryIds, []);
+  assert.deepEqual(page.cursor, cursor);
+});
+
+test("empty history remains resumable and truncation produces a reset", () => {
+  const empty = paginateContext(pageContext([]), null);
+  assert.deepEqual(empty.cursor, { firstEntryId: null, lastEntryId: null });
+  assert.equal(paginateContext(pageContext([]), empty.cursor).mode, "append");
+  assert.equal(paginateContext(pageContext([]), historyCursor(pageContext(["a"]))).mode, "replace");
+  const added = paginateContext(pageContext(["a"]), empty.cursor);
+  assert.equal(added.mode, "replace");
+  assert.deepEqual(added.context.entryIds, ["a"]);
+});
+
+test("indexed history selection preserves cursor boundaries and rejects stale positions", () => {
+  const ids = ["a", "b", "c", "d"];
+  const positions = new Map(ids.map((id, index) => [id, index]));
+  const cursor = { firstEntryId: "a", lastEntryId: "b" };
+  const range = selectHistoryRange(ids, cursor, 1, positions);
+  assert.equal(range.mode, "append");
+  assert.deepEqual(ids.slice(range.start, range.end), ["c"]);
+  assert.deepEqual(range.cursor, { firstEntryId: "a", lastEntryId: "c" });
+  assert.equal(range.hasMore, true);
+  const changed = selectHistoryRange(["a", "different", "c", "d"], cursor, 2, positions);
+  assert.equal(changed.mode, "replace");
+  assert.equal(changed.baseEntryId, null);
+});
+
+test("page limits are validated", () => {
+  for (const limit of [0, -1, 1.5, 201]) {
+    assert.throws(() => selectHistoryRange(["a"], null, limit), RangeError);
+  }
+});
+
+test("cursor parsing accepts opaque entry IDs but rejects malformed or unbounded input", () => {
+  const cursor = { firstEntryId: "first-id", lastEntryId: "last-id" };
+  assert.deepEqual(parseHistoryCursor(JSON.stringify(cursor)), cursor);
+  assert.equal(parseHistoryCursor(null), null);
+  for (const raw of ["", "[]", "null", "{}", "not-json", JSON.stringify({ firstEntryId: null, lastEntryId: "id" }), JSON.stringify({ firstEntryId: "a", lastEntryId: "x".repeat(257) }), " ".repeat(2049)]) {
+    assert.throws(() => parseHistoryCursor(raw), undefined, raw);
+  }
 });

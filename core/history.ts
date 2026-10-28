@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@/lib/types";
+import { isRecord } from "./guards";
 import type { WireEvent } from "./protocol";
 
 /**
@@ -217,4 +218,101 @@ export function advanceFloors(
   }
 
   return { stale: false, floors: next, streamSequence: Math.max(streamSequence, sequence) };
+}
+
+// ---------------------------------------------------------------------------
+// Display-history paging
+// ---------------------------------------------------------------------------
+
+/**
+ * Durable display-history position, scoped to one session and selected view.
+ * A cursor never authorizes a session or a file path: it only names entry ids.
+ */
+export const MAX_SYNC_MESSAGES = 200;
+
+export function historyCursor(context: { entryIds: readonly string[] }): HistoryCursor {
+  return {
+    firstEntryId: context.entryIds[0] ?? null,
+    lastEntryId: context.entryIds.at(-1) ?? null,
+  };
+}
+
+/** Decode only bounded IDs; anything else is a malformed client request. */
+export function parseHistoryCursor(raw: string | null): HistoryCursor | null {
+  if (raw === null) return null;
+  if (raw.length > 2048) throw new Error("Invalid history cursor");
+  const value: unknown = JSON.parse(raw);
+  if (!isRecord(value)) throw new Error("Invalid history cursor");
+  const validId = (id: unknown): id is string | null =>
+    id === null || (typeof id === "string" && id.length > 0 && id.length <= 256);
+  if (!validId(value.firstEntryId) || !validId(value.lastEntryId)
+    || (value.firstEntryId === null) !== (value.lastEntryId === null)) {
+    throw new Error("Invalid history cursor");
+  }
+  return { firstEntryId: value.firstEntryId, lastEntryId: value.lastEntryId };
+}
+
+export interface HistoryRange {
+  mode: "append" | "replace";
+  baseEntryId: string | null;
+  start: number;
+  end: number;
+  cursor: HistoryCursor;
+  hasMore: boolean;
+}
+
+/**
+ * Page the selected display path. A cursor that no longer lines up with the
+ * current prefix (a branch switch, a new compaction) resets the page instead
+ * of appending unrelated entries. `positions` lets an indexed reader locate
+ * the cursor without scanning the delivered prefix again.
+ */
+export function selectHistoryRange(
+  entryIds: readonly string[],
+  cursor: HistoryCursor | null,
+  limit = MAX_SYNC_MESSAGES,
+  positions?: ReadonlyMap<string, number>,
+): HistoryRange {
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SYNC_MESSAGES) throw new RangeError("Invalid history page limit");
+  const firstEntryId = entryIds[0] ?? null;
+  const cursorIndex = cursor?.lastEntryId
+    ? positions ? positions.get(cursor.lastEntryId) ?? -1 : entryIds.indexOf(cursor.lastEntryId)
+    : -1;
+  const append = cursor !== null && cursor.firstEntryId === firstEntryId
+    && ((cursorIndex >= 0 && entryIds[cursorIndex] === cursor.lastEntryId) || (cursor.lastEntryId === null && entryIds.length === 0));
+  const start = append ? cursorIndex + 1 : 0;
+  const end = Math.min(start + limit, entryIds.length);
+  return {
+    mode: append ? "append" : "replace",
+    baseEntryId: append ? cursor.lastEntryId : null,
+    start,
+    end,
+    cursor: { firstEntryId, lastEntryId: entryIds[end - 1] ?? null },
+    hasMore: end < entryIds.length,
+  };
+}
+
+export interface HistoryPageSlice<T> {
+  mode: "append" | "replace";
+  baseEntryId: string | null;
+  context: T;
+  cursor: HistoryCursor;
+  hasMore: boolean;
+}
+
+/** Slice a built context (`messages`/`entryIds` stay parallel) to one page. */
+export function paginateContext<T extends { messages: AgentMessage[]; entryIds: string[] }>(
+  context: T,
+  cursor: HistoryCursor | null,
+  limit = MAX_SYNC_MESSAGES,
+): HistoryPageSlice<T> {
+  const { start, end, ...page } = selectHistoryRange(context.entryIds, cursor, limit);
+  return {
+    ...page,
+    context: {
+      ...context,
+      messages: context.messages.slice(start, end),
+      entryIds: context.entryIds.slice(start, end),
+    },
+  };
 }
