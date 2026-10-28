@@ -1,5 +1,5 @@
 import { NextResponse } from "../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { statSync, type Stats } from "fs";
 import { homedir } from "os";
 import { isAbsolute, resolve } from "path";
@@ -45,6 +45,6 @@ export async function POST(req: Request) {
       projectKey: projectIdentityKey(project.projectRoot),
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

@@ -15,7 +15,7 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test core/*.test.mjs lib/*.test.mjs lib/omp/*.test.mjs",
+    "test": "node --experimental-strip-types --test core/*.test.mjs lib/*.test.mjs lib/omp/*.test.mjs server/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "start": "node --experimental-strip-types server/index.ts",
     "dev": "node --experimental-strip-types server/index.ts"

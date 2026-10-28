@@ -2,7 +2,7 @@ import { realpathSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, resolve } from "path";
 import { NextResponse } from "../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import { allowFileRoot } from "@/lib/file-access";
 import {
@@ -60,7 +60,7 @@ export async function GET() {
     for (const project of projects) allowFileRoot(project.path);
     return NextResponse.json({ projects });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
 
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
     if (error instanceof ProjectPathError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
     }
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
 
@@ -242,7 +242,7 @@ export async function PATCH(req: Request) {
     if (error instanceof ProjectPathError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
     }
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
 
@@ -262,6 +262,6 @@ export async function DELETE(req: Request) {
     saveProjectRegistry(hideProject(registry, projectRoot));
     return NextResponse.json({ success: true });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

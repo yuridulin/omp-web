@@ -178,7 +178,7 @@ export async function GET(
   const { id } = await params;
   try {
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     const filePath = resolved.filePath;
 
     const searchParams = new URL(req.url).searchParams;
@@ -291,7 +291,7 @@ export async function PATCH(
     }
     if (!renamed) {
       const resolved = await resolveSessionPathOr404(id);
-      if ("response" in resolved) return resolved.response;
+      if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
       const filePath = resolved.filePath;
       // Resolution awaited: an Edit may have started on the current wrapper
       // since the failed native rename. Never bypass its fence with a file write.
@@ -317,7 +317,7 @@ export async function DELETE(
   const { id } = await params;
   try {
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     const filePath = resolved.filePath;
 
     // Read only the bounded header before deleting.

@@ -1,5 +1,5 @@
 import { NextResponse } from "../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { existsSync } from "fs";
 import { join } from "path";
 import { addWorktree, findCurrentWorktreePath, listWorktrees, removeWorktree, resolveProject } from "@/lib/worktree";
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
       worktrees,
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
 

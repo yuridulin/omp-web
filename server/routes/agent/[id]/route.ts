@@ -1,6 +1,6 @@
 import { NextResponse } from "../../../http";
 import { readSessionHeader } from "@/lib/session-reader";
-import { apiErrorResponse, resolveSessionPathOr404 } from "@/lib/api-utils";
+import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 import { startRpcSession, getRpcSession, resolveSpawnCwdResult, WebRpcError } from "@/lib/rpc-manager";
 import { RpcCommandError } from "@/lib/omp/rpc-process";
 import { parseJsonWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
@@ -40,7 +40,7 @@ function commandErrorResponse(error: unknown) {
   if (error instanceof RpcCommandError) {
     return NextResponse.json({ error: error.message, code: error.code ?? "rpc_command_failed" }, { status: 400 });
   }
-  return apiErrorResponse(error);
+  return NextResponse.json(apiErrorBody(error), { status: 500 });
 }
 
 // POST /api/agent/[id] - Send a command to an existing session
@@ -84,7 +84,7 @@ export async function POST(
     }
 
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     const filePath = resolved.filePath;
 
     const header = readSessionHeader(filePath);

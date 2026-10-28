@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { mkdir, rm } from "fs/promises";
 import { join } from "path";
 import { NextResponse } from "../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { cloneDirectoryName } from "@/lib/git-clone";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
 import { ProjectPathError, validateProjectPath } from "@/lib/project-registry";
@@ -65,7 +65,7 @@ function runGitClone(url: string, target: string, signal: AbortSignal, onOutput:
 export async function POST(req: Request) {
   let body: { id?: unknown; parent?: unknown; url?: unknown };
   try {
-    body = await req.json();
+    body = await req.json() as { id?: unknown; parent?: unknown; url?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid request", code: "invalid_request" }, { status: 400 });
   }
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       return NextResponse.json({ error: `Already exists: ${target}`, code: "clone_target_exists" }, { status: 409 });
     }
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

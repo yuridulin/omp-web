@@ -106,11 +106,11 @@ function result(
 async function fetchJson(
   url: string,
   fetcher: Fetcher,
-  headers?: HeadersInit,
+  headers?: Record<string, string>,
 ): Promise<unknown> {
   const response = await fetcher(url, {
     cache: "no-store",
-    headers,
+    headers: headers ? Object.entries(headers) : undefined,
     signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
   });
   if (!response.ok) throw new HttpError(response.status);

@@ -1,8 +1,6 @@
 import { NextResponse } from "../../http";
 import { getProviderUsage } from "@/lib/provider-usage";
 
-export const dynamic = "force-dynamic";
-
 const IDENTIFIER_RE = /^[A-Za-z0-9._:/-]{1,200}$/;
 
 function readIdentifier(value: string | null): string | undefined {

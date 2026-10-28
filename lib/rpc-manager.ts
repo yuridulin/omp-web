@@ -1,10 +1,8 @@
 import { randomUUID } from "crypto";
 import { existsSync, realpathSync } from "fs";
 import { homedir } from "os";
-import { validateAgentImages } from "./image-attachments";
 import { hasVisibleAssistantContent } from "./assistant-response";
-import { invalidateModelsCache } from "./models-cache";
-import { RpcCommandError, RpcCommandTimeoutError, RpcProcess, type RpcFrame } from "./omp/rpc-process";
+import { RpcCommandTimeoutError, RpcProcess, type RpcFrame } from "./omp/rpc-process";
 import { readNativeSettings } from "./omp/settings-config";
 import { getAgentEnvOverrides } from "./omp/agent-env";
 import { editSessionHistory, isSessionEditReply, SESSION_EDIT_COMMAND, SESSION_EDIT_EXTENSION_PATH, SessionEditAgentInvocationError, type SessionEditResult } from "./omp/session-edit";
@@ -31,23 +29,54 @@ import { markShuttingDown, recordRunningSessions, RESUME_PROMPT, takeInterrupted
 import { PRESET_FULL } from "../core/tool-presets";
 import { comparableProjectPath } from "./comparable-path";
 import { samePath } from "./paths";
-import { isRecord } from "./type-guards";
 import { BLOCKING_UI_METHODS, createNotificationDetector } from "./notification-events";
 import { publishNotification } from "./notification-hub";
 import { parseSkillDiagnosticsSnapshot, type SkillDiagnosticsSnapshot } from "./skill-diagnostics";
 import { isReservedLaunchArg, loadProjectRegistry } from "./project-registry";
 import { eventWithToolResultImageUrls } from "./media-cache";
 import type {
-  BashResultInfo,
-  OmpModel,
   RpcAvailableSlashCommand,
   RpcSessionState,
-  SessionStatsInfo,
   WebSessionState,
 } from "./pi-types";
 import type { AgentMessage, CrossSessionHostToolCall, ExitedRpcSession, ExtensionWidgetItem, ProjectLaunchConfig } from "./types";
 import type { SessionLiveSnapshot, SessionLiveToolEvent, SessionStreamCursor } from "./session-sync";
+import {
+  bindCommandDispatch,
+  dispatchCommand,
+  GET_STATE_TIMEOUT_MS,
+  PROMPT_ACK_TIMEOUT_MS,
+  queueWhileShellRunning,
+  RESTARTING_MESSAGE,
+  send,
+  WebRpcError,
+} from "./rpc-command-dispatch";
+import {
+  armReap,
+  bindSessionLifecycle,
+  destroy,
+  destroyAndWait,
+  DISCONNECT_DESTROY_MS,
+  handleProcessExit,
+  initialize,
+  noteActivity,
+  reapIfDisconnected,
+  resetIdleTimer,
+  restart,
+  start,
+  waitUntilReady,
+} from "./rpc-session-lifecycle";
+import {
+  adoptSessionName,
+  autoTitle,
+  bindSessionTitle,
+  generateSessionTitle,
+  generateTitle,
+  readSessionName,
+  RENAME_OUTPUT_RE,
+} from "./rpc-session-title";
 
+export { WebRpcError };
 // ============================================================================
 // Types
 // ============================================================================
@@ -69,142 +98,11 @@ interface CompactionResultLike {
   tokensAfter?: number;
 }
 
-const IDLE_DESTROY_MS = 10 * 60 * 1000;
-/**
- * How long a session may sit with **no web UI attached** before its omp child is
- * torn down. IDLE_DESTROY_MS (10min) is the backstop for a session that keeps
- * receiving traffic; this is the much faster path for "the user closed the tab
- * and walked away", so abandoned children don't hold a slot for 10 minutes.
- *
- * The floor is set by the *client*, not the server: when an SSE stream dies the
- * browser retries with capped backoff (`EVENT_STREAM_RETRY_MAX_MS` = 30s in
- * `hooks/useAgentSession-stream.ts`), and a backgrounded tab clamps its timers
- * to ~1/min. A window anywhere near 60s therefore races the reconnect and turns
- * a returning tab into a 409 "Session is not managed by omp-web" plus a cold
- * respawn. 120s keeps ~2x the retry ceiling and still reclaims 5x faster than
- * the idle backstop. Set `OMP_WEB_DISCONNECT_DESTROY_MS=0` to disable reaping
- * and fall back to IDLE_DESTROY_MS alone.
- */
-const DISCONNECT_DESTROY_MS = process.env.OMP_WEB_DISCONNECT_DESTROY_MS !== undefined
-  ? Math.max(0, Number(process.env.OMP_WEB_DISCONNECT_DESTROY_MS) || 0)
-  : 120_000;
-const READY_TIMEOUT_MS = 120_000;
 const MCP_LIST_TIMEOUT_MS = 15_000;
-const GET_STATE_TIMEOUT_MS = 5_000;
-/** Cap on the *acknowledgement* of a prompt frame — not on model execution.
- * omp acks a prompt as soon as it accepts it and the run then reports through
- * events (agent_start/agent_end), so an ack that never arrives means the child
- * is wedged: without this the API request (and the UI spinner behind it) would
- * stay pending forever. Generous enough to cover slow local startup work the
- * child does before acking. */
-const PROMPT_ACK_TIMEOUT_MS = 30_000;
-/** Title generation is an LLM call on omp's side. */
-const GENERATE_TITLE_TIMEOUT_MS = 60_000;
-const RENAME_POLL_INTERVAL_MS = 500;
-const RENAME_POLL_TIMEOUT_MS = 20_000;
-/** Background title requests per session. omp declines low-signal openers
- * (a bare greeting), so a later turn of the same session retries. */
-const AUTO_TITLE_MAX_ATTEMPTS = 3;
-/** command_output lines printed by omp's argument-less `/rename`. */
-const RENAME_OUTPUT_RE = /^(Session renamed to |Could not generate a session title|Session name not changed|Rename failed:)/;
 const NON_TERMINAL_CONTINUATION_GRACE_MS = 2_000;
-const AWAITING_AGENT_START_TIMEOUT_MS = 10_000;
-const RESTARTING_MESSAGE = "This session is restarting — retry in a moment.";
-const BASH_EXCLUDE_MESSAGE =
-  "omp cannot run a shell command with its output excluded from the model context (`!!`): the RPC bash command has no exclusion option, so the output would silently enter the context anyway. Run it with a single `!` to share the output with the model, or use a terminal outside omp web.";
-
-/**
- * Failure raised by omp-web itself (not by omp) carrying a stable snake_case
- * code. API routes forward `{ error, code }` so the client dictionary can
- * localize it via `errors.<code>` while unknown codes fall back to the text.
- */
-export class WebRpcError extends Error {
-  readonly code: string;
-
-  constructor(message: string, code: string) {
-    super(message);
-    this.name = "WebRpcError";
-    this.code = code;
-  }
-}
-
-/** Shape check for an ask-dialog `answers` payload; omp validates the content. */
-function isAskAnswers(value: unknown): boolean {
-  return Array.isArray(value) && value.every((answer: unknown) =>
-    isRecord(answer)
-    && typeof answer.id === "string"
-    && Array.isArray(answer.selectedOptions)
-    && answer.selectedOptions.every((option: unknown) => typeof option === "string")
-    && (answer.customInput === undefined || typeof answer.customInput === "string"));
-}
-
-// Commands forwarded to omp verbatim (request shape already matches rpc-types).
-const PASSTHROUGH_COMMANDS = new Set([
-  "abort",
-  "abort_and_prompt",
-  "set_thinking_level",
-  "cycle_thinking_level",
-  "cycle_model",
-  "get_available_models",
-  "set_auto_compaction",
-  "set_auto_retry",
-  "abort_retry",
-  "abort_bash",
-  "set_todos",
-  "set_steering_mode",
-  "set_follow_up_mode",
-  "set_interrupt_mode",
-  "get_branch_messages",
-  "get_messages",
-  "get_messages_page",
-  "export_html",
-  "handoff",
-  "get_subagents",
-  "get_subagent_messages",
-  "set_subagent_subscription",
-  "get_login_providers",
-  "login",
-  "predict_word",
-  "predict_word_feedback",
-  "btw",
-  "btw_cancel",
-  "get_btw_history",
-]);
-
-// Outlasts omp's cold prediction-daemon start (up to 3 × 30s start rounds plus a
-// 30s first completion), so omp's answer or error decides; a wedged daemon still
-// cannot pin the request forever.
-const PREDICT_WORD_TIMEOUT_MS = 125_000;
-
-// Commands that can carry user-attached images to the model. All of them must
-// pass the same server-side per-image/count/aggregate validation before the
-// payload reaches omp — a client is free to POST any of them directly.
-const IMAGE_BEARING_COMMANDS = new Set(["prompt", "steer", "follow_up", "abort_and_prompt"]);
-
-// These commands can append to, replace, or resume the active history. Edits
-// fence them across every attached client, including mutations already awaiting
-// a native acknowledgement when an edit arrives. Read-only queries and dialog
-// replies remain available while a navigation hook is running.
-const HISTORY_MUTATING_COMMANDS = new Set([
-  "edit_message", "prompt", "steer", "follow_up", "abort", "abort_and_prompt",
-  "abort_and_restore_queue", "remove_queued_message", "promote_queued_message",
-  "fork", "new_session", "switch_session", "compact", "abort_compaction",
-  "reload", "bash", "abort_bash", "handoff", "set_todos", "set_session_name",
-  "set_model", "cycle_model", "set_thinking_level", "cycle_thinking_level",
-  "set_fast_mode", "set_slow_mode", "set_auto_compaction", "set_auto_retry", "abort_retry",
-]);
-
-// pi-web commands with no omp RPC equivalent. The UI tolerates these failing.
-const UNSUPPORTED_COMMANDS: Record<string, string> = {
-  navigate_tree: "Branch navigation is not supported over the omp RPC protocol",
-  clear_queue: "Recalling queued messages is not supported over the omp RPC protocol",
-  get_tools: "Per-session tool listing is not supported over the omp RPC protocol",
-  set_tools: "Changing tools on a running session is not supported over the omp RPC protocol; tool presets apply to new sessions",
-  extension_ui_input: "Extension custom UI is not supported over the omp RPC protocol",
-};
 
 // omp aliases "find"->"glob" and has no "ls" tool; the web UI presets still use
-// the pi names (lib/tool-presets.ts), so translate before building --tools.
+// the pi names (core/tool-presets.ts), so translate before building --tools.
 const TOOL_NAME_ALIASES: Record<string, string> = { find: "glob", search: "grep" };
 const DROPPED_TOOL_NAMES = new Set(["ls"]);
 
@@ -260,10 +158,6 @@ export function buildSessionSpawnArgs(sessionFile: string, toolNames?: string[],
   return args;
 }
 
-function toImageContents(value: unknown): Array<{ type: "image"; data: string; mimeType: string }> | undefined {
-  const images = value as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
-  return images?.length ? images : undefined;
-}
 
 /**
  * Pick a spawn cwd that actually exists. A session records the directory it was
@@ -317,10 +211,6 @@ function patchEstimatedTokensAfter(result: unknown): void {
 // the app expects (same command surface pi-web's in-process wrapper offered).
 // ============================================================================
 
-function titleFromResult(result: unknown): string | null {
-  const value = typeof result === "string" ? result : isRecord(result) ? (result.title ?? result.name ?? result.sessionName) : null;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
 
 interface IdentityChangeOptions {
   /** The old id still names this wrapper (session moved files, not switched). */
@@ -457,63 +347,16 @@ export class AgentSessionWrapper {
     return this.listeners.length > 0;
   }
 
-  /**
-   * Any real use of the session: an attached UI, a command from an API route, or
-   * a frame from the child. `resetIdleTimer()` is the single choke point for all
-   * three (start(), handleFrame(), send()), so driving reaping from here means
-   * the deadline can never drift away from what the session is actually doing.
-   *
-   * Deliberately does NOT touch a timer: only the *deadline* moves, and
-   * `armReap` keeps at most one timer alive, so a 100fps token stream costs a
-   * timestamp write instead of clearTimeout/setTimeout churn.
-   */
   private noteActivity(): void {
-    this.lastActivityAt = Date.now();
-    this.reapDeadline = this.lastActivityAt + this.disconnectDestroyMs;
-    this.armReap();
+    noteActivity.call(this as never);
   }
 
   private armReap(): void {
-    if (this.reapTimer || this.disconnectDestroyMs <= 0) return;
-    if (this.hasSubscribers() || !this.isAlive()) return;
-    this.reapTimer = setTimeout(() => {
-      this.reapTimer = null;
-      this.reapIfDisconnected();
-    }, Math.max(0, this.reapDeadline - Date.now()));
-    // Never pin the event loop for a cleanup deadline (cf. the MCP waiter and
-    // lib/session-resume.ts): an unref'd reap must not delay process exit.
-    this.reapTimer.unref?.();
+    armReap.call(this as never);
   }
 
-  /**
-   * Tear the child down only when nobody can observe the loss. Every condition
-   * here is a hard invariant, not a heuristic:
-   *  - a subscriber means an open HTTP 200 stream that `destroy()` would leave
-   *    half-open (the route holds its own detach + heartbeat), so the run would
-   *    vanish silently and the tab would only notice via a later 409;
-   *  - isRunning() covers an in-flight turn that no listener is watching;
-   *  - handshaking covers a spawn that has not finished its startup handshake;
-   *  - pendingCommands covers a route command (predict_word, mcp list, export)
-   *    whose response the child still owes us;
-   *  - the deadline check absorbs activity that landed while this fired.
-   * Anything else keeps the session and re-arms for the remaining window.
-   */
   private reapIfDisconnected(): void {
-    if (!this.isAlive() || this.hasSubscribers() || this.isRunning()
-      || this.handshaking || this.pendingCommands > 0) {
-      // A paused human dialog produces no frames. Do not spin a zero-delay
-      // timer once the old deadline has passed while protected work remains.
-      this.reapDeadline = Math.max(this.reapDeadline, Date.now() + this.disconnectDestroyMs);
-      this.armReap();
-      return;
-    }
-    if (Date.now() < this.reapDeadline) {
-      this.reapDeadline = this.lastActivityAt + this.disconnectDestroyMs;
-      this.armReap();
-      return;
-    }
-    console.info("[omp-web] automatic-session-cleanup", JSON.stringify({ sessionId: this._sessionId, reason: "disconnected-idle", at: new Date().toISOString() }));
-    this.destroy("disconnected-idle");
+    reapIfDisconnected.call(this as never);
   }
 
   /** NDJSON messages are fresh snapshots; copy containers, not token payloads. */
@@ -544,55 +387,15 @@ export class AgentSessionWrapper {
   }
 
   start(): void {
-    this.unsubscribeFrames = this.proc.onFrame((frame) => this.handleFrame(frame));
-    this.resetIdleTimer();
-    notifyRunningChange();
+    start.call(this as never);
   }
 
-  /** Resolves once the child announced readiness and identity is known. */
   waitUntilReady(): Promise<void> {
-    if (!this.initPromise) this.initPromise = this.initialize();
-    return this.initPromise;
+    return waitUntilReady.call(this as never);
   }
 
   private async initialize(): Promise<void> {
-    // READY_TIMEOUT_MS and the reap window are the same order of magnitude, so
-    // the handshake itself counts as in-flight work: a child that is slow to
-    // announce itself must be torn down by its own startup timeout (which
-    // reports a real error), never by the reaper.
-    this.handshaking = true;
-    try {
-      const ready = await this.proc.waitReady(READY_TIMEOUT_MS);
-      await this.proc.negotiateProtocol(ready);
-      // Subscribe to subagent lifecycle/progress/event frames so the UI can show
-      // a live subagent roster. Older omp builds may not know the command —
-      // degrade silently (the UI falls back to no subagent info).
-      await this.proc.sendCommand({ type: "set_subagent_subscription", level: "events" }).catch(() => {});
-      // Opt into omp's all-questions ask dialog; older omp rejects the command
-      // and keeps the per-question select/editor fallback.
-      // Bounded like get_state so a child that never answers cannot stall startup.
-      await this.proc.sendCommand({ type: "set_ask_dialog", enabled: true }, GET_STATE_TIMEOUT_MS).catch(() => {});
-      const state = await this.getStateWithTimeout();
-      this.applyIdentity(state);
-      // Warn when the spawn cwd differs from the session's recorded directory.
-      // This happens when the recorded cwd was deleted (removed worktree, moved
-      // repo, different machine): resolveSpawnCwd silently substituted a live
-      // directory so omp can spawn, but without a notice the user would see the
-      // sidebar/header still advertise the (gone) recorded path while file tool
-      // calls operate on a different tree.
-      if (this.recordedCwd && this.recordedCwd !== this.cwd) {
-        this.emit({
-          type: "notice",
-          level: "warning",
-          message: `This session's working directory no longer exists; the agent is running in ${this.cwd}.`,
-        });
-      }
-    } finally {
-      this.handshaking = false;
-      // The handshake is real activity, so the reap clock restarts from here
-      // rather than from spawn (a slow start must not eat the whole window).
-      this.noteActivity();
-    }
+    return initialize.call(this as never);
   }
 
   private applyIdentity(state: RpcSessionState): void {
@@ -639,96 +442,24 @@ export class AgentSessionWrapper {
   /** Until this time, drop the chat output of a background `/rename`. */
   private quietRenameUntil = 0;
 
-  /**
-   * Ask omp to generate a title for this session with its own title generator.
-   * Prefers the native `generate_title` RPC command and falls back to the
-   * argument-less `/rename` slash command. Returns null when omp cannot do
-   * either right now (older omp, or the session is mid-run, where `/rename`
-   * would be queued as a prompt). With `quiet`, the `/rename` fallback skips
-   * the prompt bookkeeping (the UI never sees a run) and its output stays out
-   * of the chat.
-   */
   async generateTitle({ quiet = false }: { quiet?: boolean } = {}): Promise<string | null> {
-    if (this.restarting) throw new WebRpcError(RESTARTING_MESSAGE, "session_restarting");
-    if (!this.isAlive()) throw new Error("Session is no longer running");
-
-    if (this.historyEditInFlight) throw new WebRpcError("Wait for the history edit to finish", "session_busy");
-    this.historyMutationPendingCount += 1;
-    try {
-      return await this.generateSessionTitle(quiet);
-    } finally {
-      this.historyMutationPendingCount -= 1;
-    }
+    return generateTitle.call(this as never, { quiet });
   }
 
   private async generateSessionTitle(quiet = false): Promise<string | null> {
-    if (!this.generateTitleUnsupported) {
-      try {
-        const result = await this.proc.sendCommand<unknown>({ type: "generate_title" }, GENERATE_TITLE_TIMEOUT_MS);
-        const title = titleFromResult(result) ?? (await this.readSessionName());
-        if (title) this.adoptSessionName(title);
-        return title;
-      } catch (error) {
-        if (!(error instanceof Error && error.message.includes("Unknown command"))) throw error;
-        this.generateTitleUnsupported = true;
-      }
-    }
-
-    // `/rename` without arguments generates a title (omp >= 18.6). It is a
-    // prompt, so it must never be sent while a run is in flight.
-    if (this.isRunning()) return null;
-    const before = (await this.readSessionName()) ?? "";
-    if (quiet) {
-      // omp saves the title before it prints the result, so the poll below can
-      // finish first: the window closes on that output or on expiry instead.
-      this.quietRenameUntil = Date.now() + GENERATE_TITLE_TIMEOUT_MS;
-      await this.proc.sendCommand({ type: "prompt", message: "/rename" }, PROMPT_ACK_TIMEOUT_MS);
-    } else {
-      await this.send({ type: "prompt", message: "/rename" });
-    }
-    const deadline = Date.now() + RENAME_POLL_TIMEOUT_MS;
-    let title = await this.readSessionName();
-    while (!(title && title !== before) && Date.now() < deadline && this.isAlive()) {
-      await new Promise((resolve) => setTimeout(resolve, RENAME_POLL_INTERVAL_MS));
-      title = await this.readSessionName();
-    }
-    if (title) this.adoptSessionName(title);
-    return title;
+    return generateSessionTitle.call(this as never, quiet);
   }
 
-  /**
-   * omp does not title sessions on its own in RPC mode
-   * (can1357/oh-my-pi#14616), so once a turn finishes, ask its title generator
-   * to name an untitled session, as omp's terminal UI does.
-   */
   private autoTitle(): void {
-    const sessionId = this._sessionId;
-    if (!sessionId || this._sessionName || this.autoTitleInFlight) return;
-    // omp writes the session file once the history holds an assistant message.
-    if (!this._sessionFile || !existsSync(this._sessionFile)) return;
-    const attempts = this.autoTitleAttempts.get(sessionId) ?? 0;
-    if (attempts >= AUTO_TITLE_MAX_ATTEMPTS) return;
-    this.autoTitleAttempts.set(sessionId, attempts + 1);
-    this.autoTitleInFlight = true;
-    this.generateTitle({ quiet: true })
-      .catch((error) => {
-        console.warn(`[omp-web] could not title session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
-      })
-      .finally(() => {
-        this.autoTitleInFlight = false;
-      });
+    autoTitle.call(this as never);
   }
 
   private async readSessionName(): Promise<string | null> {
-    const state = await this.getStateWithTimeout();
-    const name = typeof state.sessionName === "string" ? state.sessionName.trim() : "";
-    return name || null;
+    return readSessionName.call(this as never);
   }
 
   private adoptSessionName(title: string): void {
-    this._sessionName = title;
-    this.invalidateSessionLists();
-    notifyRunningChange({ refreshSessionList: true });
+    adoptSessionName.call(this as never, title);
   }
 
   /** Re-read identity after omp reported that it moved this session to a new file. */
@@ -751,24 +482,7 @@ export class AgentSessionWrapper {
     { code, signal, stderrTail }: { code: number | null; signal: NodeJS.Signals | null; stderrTail: string },
     sourceProc: RpcProcess = this.proc,
   ): void {
-    if (!this._alive || sourceProc === this.expectedExitProc) return;
-    const detail = (stderrTail.trim().split("\n").pop() ?? "").slice(-500);
-    const status = signal ? `signal ${signal}` : `code ${code ?? "null"}`;
-    // Recorded before destroy(): its running-change broadcast must carry the
-    // record so sidebars that missed the notice below still see the exit.
-    if (this._sessionId) getExitedMap().set(this._sessionId, { id: this._sessionId, cwd: this.cwd, at: Date.now(), code, signal, detail });
-    this.emit({
-      type: "notice",
-      level: "error",
-      message: `The omp process for this session exited unexpectedly (${status})${detail ? `: ${detail}` : "."}`,
-    });
-    // Terminal agent_end so a client mid-stream stops spinning immediately
-    // instead of waiting for the reconcile poll.
-    if (this.streaming || this.promptRunning) this.emit({ type: "agent_end", isTerminal: true, messages: [] });
-    if (this.streaming || this.promptRunning || this.unsettled) {
-      this.publishNotifications({ type: "process_exit", detail: detail || status });
-    }
-    this.destroy();
+    handleProcessExit.call(this as never, { code, signal, stderrTail }, sourceProc);
   }
 
   private publishNotifications(frame: Record<string, unknown>): void {
@@ -1265,28 +979,7 @@ export class AgentSessionWrapper {
   }
   private lastIdleReset = 0;
   private resetIdleTimer(force = false): void {
-    // The single activity choke point: start(), every child frame, and every
-    // send() land here, so this is where "someone is using this session" is
-    // observed. Tracked before the throttle below, which only limits timer
-    // churn — it must never hide activity from the reaper.
-    this.noteActivity();
-    const now = Date.now();
-    if (!force && this.idleTimer && now - this.lastIdleReset < 5000) {
-      return;
-    }
-    this.lastIdleReset = now;
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => {
-      if (this.isRunning() || this.handshaking || this.pendingCommands > 0) {
-        this.resetIdleTimer(true);
-        return;
-      }
-      console.info("[omp-web] automatic-session-cleanup", JSON.stringify({ sessionId: this._sessionId, reason: "idle-timeout", at: new Date().toISOString() }));
-      this.destroy("idle-timeout");
-    }, IDLE_DESTROY_MS);
-    // A cleanup deadline must not keep the process alive; the registry's
-    // process-exit handler disposes every child anyway.
-    this.idleTimer.unref?.();
+    resetIdleTimer.call(this as never, force);
   }
 
   onEvent(listener: EventListener): () => void {
@@ -1695,547 +1388,28 @@ export class AgentSessionWrapper {
     }
   }
 
-  /** Full restart of the child process against the same session file. This is
-   * omp-web's `reload`: extensions, skills, prompts, and tools are rediscovered
-   * on boot, matching a fresh CLI launch. */
   private async restart(): Promise<void> {
-    if (this.restarting) throw new WebRpcError(RESTARTING_MESSAGE, "session_restarting");
-    const sessionFile = this._sessionFile;
-    const resumable = !!sessionFile && existsSync(sessionFile);
-    const old = this.proc;
-    // Stays true for the whole restart so send() rejects commands that would
-    // otherwise hit the disposed or half-built child.
-    this.restarting = true;
-    this.resetStream();
-    this.streaming = false;
-    this.promptRunning = false;
-    this.compacting = false;
-    this.unsubscribeFrames?.();
-    try {
-      this.expectedExitProc = old;
-      try {
-        await old.dispose();
-      } finally {
-        if (this.expectedExitProc === old) this.expectedExitProc = null;
-      }
-      if (!this._alive) return;
-
-      this.extensionStatuses.clear();
-      this.extensionWidgets.clear();
-      this.clearPendingUiRequests();
-      this.promptRunning = false;
-      this.promptDispatchPendingCount = 0;
-      this.awaitingAgentStart = false;
-      this.awaitingAgentStartDeadline = 0;
-      this.continuationGraceUntil = 0;
-      this.bashRunning = false;
-      this.streaming = false;
-      this.compacting = false;
-      const proc = new RpcProcess({
-        cwd: this.cwd,
-        // Re-read per spawn so a restart picks up environment values the user
-        // added in Settings after this session was created (#104).
-        env: getAgentEnvOverrides(),
-        extraArgs: [...buildSessionSpawnArgs(resumable ? sessionFile : "", undefined, this.advisorSpawned, launchConfigForCwd(this.cwd)), "--extension", SESSION_EDIT_EXTENSION_PATH],
-        onExit: (info) => {
-          if (this.proc === proc) this.handleProcessExit(info, proc);
-        },
-      });
-      this.proc = proc;
-      this.unsubscribeFrames = proc.onFrame((frame) => this.handleFrame(frame));
-      try {
-        const ready = await proc.waitReady(READY_TIMEOUT_MS);
-        await proc.negotiateProtocol(ready);
-        // The replacement process starts with subscriptions disabled; restore
-        // the live roster/transcript event stream before reading its state.
-        await proc.sendCommand({ type: "set_subagent_subscription", level: "events" }).catch(() => {});
-        await proc.sendCommand({ type: "set_ask_dialog", enabled: true }, GET_STATE_TIMEOUT_MS).catch(() => {});
-        const state = await proc.sendCommand<RpcSessionState>({ type: "get_state" }, GET_STATE_TIMEOUT_MS);
-        this.applyIdentity(state);
-        // Same fresh-spawn guard as startRpcSession: a sessionless wrapper
-        // restarts bare, and omp's startup resume handling could land it on the
-        // cwd's most recent session. An on-disk session file is the resume
-        // signal (fresh children report a not-yet-created path).
-        if (!resumable && this._sessionFile && existsSync(this._sessionFile)) {
-          await proc.sendCommand({ type: "new_session" });
-          this.applyIdentity(await proc.sendCommand<RpcSessionState>({ type: "get_state" }, GET_STATE_TIMEOUT_MS));
-        }
-      } catch (error) {
-        // Never leave the replacement running with nobody reading its frames.
-        this.unsubscribeFrames?.();
-        this.unsubscribeFrames = null;
-        void proc.dispose();
-        // The wrapper has no usable child left; drop it from the registry so the
-        // next request starts a fresh session instead of reusing a corpse.
-        this.destroy();
-        throw error;
-      }
-    } finally {
-      this.restarting = false;
-    }
-    notifyRunningChange();
+    return restart.call(this as never);
   }
 
   async send(command: Record<string, unknown>): Promise<unknown> {
-    if (this.restarting) throw new WebRpcError(RESTARTING_MESSAGE, "session_restarting");
-    if (this.mcpListInFlight) throw new WebRpcError("MCP management is in progress. Try again when it finishes.", "session_busy");
-    if (!this.isAlive()) throw new Error("Session is no longer running");
-    if (typeof command.type === "string" && command.type.startsWith("abort")) {
-      console.info("[omp-web] cancellation-command", JSON.stringify({ sessionId: this._sessionId, type: command.type, at: new Date().toISOString() }));
-    }
-    const mutatesHistory = HISTORY_MUTATING_COMMANDS.has(command.type as string);
-    if (mutatesHistory && this.historyEditInFlight) {
-      throw new WebRpcError("Wait for the history edit to finish", "session_busy");
-    }
-    if (mutatesHistory) this.historyMutationPendingCount += 1;
-    this.resetIdleTimer();
-    // Covers the whole command, including the awaits inside it: a route that
-    // has an unwatched session in mid-command (predict_word on a keystroke, an
-    // export, a follow-up) must never have its child reaped underneath it.
-    this.pendingCommands += 1;
-    try {
-      return await this.dispatchCommand(command);
-    } finally {
-      this.pendingCommands = Math.max(0, this.pendingCommands - 1);
-      if (mutatesHistory) this.historyMutationPendingCount -= 1;
-    }
+    return send.call(this as never, command);
   }
 
   private async dispatchCommand(command: Record<string, unknown>): Promise<unknown> {
-    const type = command.type as string;
-
-    if (IMAGE_BEARING_COMMANDS.has(type)) {
-      const imageError = validateAgentImages(command.images);
-      if (imageError) throw new Error(imageError);
-    }
-
-    const unsupported = UNSUPPORTED_COMMANDS[type];
-    if (unsupported) throw new RpcCommandError(type, unsupported, "unsupported");
-
-    switch (type) {
-      case "prompt": {
-        // A `!!` shell command owns the session until it exits (omp rejects a
-        // prompt then, and treating that as a hard error tore down the client's
-        // optimistic turn and lost the message). Degrade into omp's own
-        // follow-up queue instead: omp keeps owning the chips and delivers the
-        // message once the shell command releases the session.
-        if (this.bashRunning) return await this.queueWhileShellRunning(command);
-        const streamingBehavior = command.streamingBehavior as "steer" | "followUp" | undefined;
-        if (!streamingBehavior) {
-          this.responseObserved = false;
-          this.responseRunActive = false;
-          if (!this.isRunning()) this.clearLiveSnapshots();
-          this.streamSequence += 1;
-          this.promptRunning = true;
-          this.promptDispatchPendingCount += 1;
-          this.awaitingAgentStart = false;
-          this.awaitingAgentStartDeadline = 0;
-          this.continuationGraceUntil = 0;
-          notifyRunningChange();
-        }
-        try {
-          // omp acks immediately; agent output streams as events, completion is
-          // agent_end (agent runs) or prompt_result (local-only slash commands).
-          const ack = await this.proc.sendCommand<{ agentInvoked?: boolean } | undefined>({
-            type: "prompt",
-            message: command.message as string,
-            ...(toImageContents(command.images) ? { images: toImageContents(command.images) } : {}),
-            ...(streamingBehavior ? { streamingBehavior } : {}),
-          }, PROMPT_ACK_TIMEOUT_MS);
-          // Slash commands fully consumed by a builtin report agentInvoked:false
-          // in the ack itself — no prompt_result frame follows.
-          if (ack?.agentInvoked === false && !streamingBehavior) {
-            this.promptRunning = false;
-            this.awaitingAgentStart = false;
-            this.awaitingAgentStartDeadline = 0;
-            this.emit({ type: "prompt_result", agentInvoked: false });
-            notifyRunningChange();
-          } else if (!streamingBehavior && ack?.agentInvoked !== false) {
-            // OMP acked but agent hasn't started yet — keep promptRunning alive
-            // until agent_start arrives (or a timeout expires).
-            this.awaitingAgentStart = true;
-            this.awaitingAgentStartDeadline = Date.now() + AWAITING_AGENT_START_TIMEOUT_MS;
-          }
-        } catch (error) {
-          this.promptRunning = false;
-          this.awaitingAgentStart = false;
-          this.awaitingAgentStartDeadline = 0;
-          this.streaming = false;
-          this.clearLiveSnapshots();
-          notifyRunningChange();
-          if (error instanceof RpcCommandTimeoutError) {
-            // The child took the frame but never acked it, so nothing will ever
-            // report this run: recycle the unacknowledged prompt. A read-only
-            // get_state timeout deliberately does not take this destructive path.
-            await this.destroyAndWait();
-            throw new WebRpcError("The OMP session stopped responding and was reset.", "session_unresponsive");
-          }
-          throw error;
-        } finally {
-          if (!streamingBehavior) {
-            this.promptDispatchPendingCount = Math.max(0, this.promptDispatchPendingCount - 1);
-          }
-        }
-        return null;
-      }
-
-      case "steer":
-      case "follow_up": {
-        // `steer` has the same collision while a `!!` shell command runs — and
-        // there is no live turn to steer anyway, so it joins the follow-up
-        // queue like a prompt would.
-        if (type === "steer" && this.bashRunning) return await this.queueWhileShellRunning(command);
-        await this.proc.sendCommand({
-          type,
-          message: command.message as string,
-          ...(toImageContents(command.images) ? { images: toImageContents(command.images) } : {}),
-        });
-        return null;
-      }
-
-      case "remove_queued_message":
-      case "promote_queued_message": {
-        // Queue mutations are synchronous control operations, like get_state.
-        // Expiry must not abort unrelated work or replay a possibly applied mutation.
-        const result = await this.proc.sendCommand(command as { type: string }, GET_STATE_TIMEOUT_MS);
-        return result ?? null;
-      }
-
-      // abort_and_restore_queue is omp's Esc: it takes queued user input back
-      // atomically, then aborts, and returns the withdrawn messages.
-      case "abort":
-      case "abort_and_restore_queue": {
-        this.responseObserved = false;
-        this.responseRunActive = false;
-        const result = await this.withFinalRunningNotification(async () => {
-          const response: unknown = await this.proc.sendCommand({ type });
-          // If the prompt was aborted before the agent loop started, no
-          // agent_end will arrive to clear the flag; the streaming flag still
-          // tracks a live turn that ends with its own agent_end.
-          this.promptRunning = false;
-          // Clear the pending-start bookkeeping too: hasPendingWork would
-          // otherwise suppress stale-state reconciliation for the full
-          // AWAITING_AGENT_START_TIMEOUT_MS, leaving the UI showing "running"
-          // after an early abort.
-          this.awaitingAgentStart = false;
-          this.awaitingAgentStartDeadline = 0;
-          this.continuationGraceUntil = 0;
-          this.clearLiveSnapshots();
-          return response;
-        });
-        return type === "abort" ? null : result ?? null;
-      }
-
-      case "get_state": {
-        try {
-          const state = await this.proc.sendCommand<RpcSessionState>({ type: "get_state" }, GET_STATE_TIMEOUT_MS);
-          return this.buildWebState(state);
-        } catch (error) {
-          if (error instanceof RpcCommandTimeoutError) {
-            // This is only an observer poll. A busy event loop or delayed RPC
-            // response is not authority to stop generation or a pending tool.
-            console.warn("[omp-web] status-query-timeout", JSON.stringify({ sessionId: this._sessionId, timeoutMs: GET_STATE_TIMEOUT_MS, running: this.isRunning(), action: "preserved", at: new Date().toISOString() }));
-            throw new WebRpcError("The OMP status query timed out. The session was left running; retry shortly.", "session_state_timeout");
-          }
-          throw error;
-        }
-      }
-
-      case "get_skill_diagnostics": {
-        const result = await this.proc.sendCommand<unknown>({ type: "get_skill_diagnostics" }, GET_STATE_TIMEOUT_MS);
-        return this.requireSkillDiagnostics(result);
-      }
-
-      case "set_skill_startup_diagnostics": {
-        if (typeof command.enabled !== "boolean") {
-          throw new WebRpcError("enabled must be a boolean", "invalid_skill_startup_diagnostics");
-        }
-        const result = await this.proc.sendCommand<unknown>({
-          type: "set_skill_startup_diagnostics",
-          enabled: command.enabled,
-        }, GET_STATE_TIMEOUT_MS);
-        return this.requireSkillDiagnostics(result);
-      }
-
-      case "set_model": {
-        const { provider, modelId } = command as { provider: string; modelId: string };
-        const model = await this.proc.sendCommand<OmpModel>({ type: "set_model", provider, modelId });
-        invalidateModelsCache();
-        this.invalidateSessionLists();
-        return { id: model.id, provider: model.provider };
-      }
-
-      case "set_fast_mode": {
-        const enabled = command.enabled === true;
-        const result = await this.proc.sendCommand<{ enabled?: boolean; active?: boolean }>({ type: "set_fast_mode", enabled });
-        this.fastModeEnabled = result?.enabled ?? enabled;
-        return { enabled: this.fastModeEnabled, active: result?.active ?? false };
-      }
-
-      case "set_slow_mode": {
-        const enabled = command.enabled === true;
-        const result = await this.proc.sendCommand<{ enabled?: boolean }>({ type: "set_slow_mode", enabled });
-        return { enabled: result?.enabled ?? enabled };
-      }
-
-      case "edit_message":
-        return this.editMessage(command.entryId);
-
-      case "fork": {
-        // omp's `branch` is pi-web's fork: it creates a branched session file
-        // and switches this live process onto it (entryId must be a user
-        // message entry, matching the web UI's fork buttons).
-        if (this.bashRunning) {
-          throw new Error("Cannot fork while a shell command is running");
-        }
-        const result = await this.proc.sendCommand<{ text: string; cancelled: boolean }>({
-          type: "branch",
-          entryId: command.entryId as string,
-        });
-        if (result.cancelled) return { cancelled: true };
-        const newSessionId = await this.refreshIdentityAfterSessionChange();
-        // `text` is the branched prompt omp hands back for edit-and-resend.
-        return { cancelled: false, newSessionId, text: result.text };
-      }
-
-      case "new_session":
-      case "switch_session": {
-        const result = await this.proc.sendCommand<{ cancelled: boolean }>(command as { type: string });
-        if (!result.cancelled) {
-          const newSessionId = await this.refreshIdentityAfterSessionChange();
-          return { cancelled: false, newSessionId };
-        }
-        return result;
-      }
-
-      case "compact": {
-        try {
-          return await this.withFinalRunningNotification(async () => {
-            this.compacting = true;
-            this.streamSequence += 1;
-            notifyRunningChange();
-            try {
-              const result = await this.proc.sendCommand<CompactionResultLike>({
-                type: "compact",
-                ...(command.customInstructions ? { customInstructions: command.customInstructions } : {}),
-              });
-              patchEstimatedTokensAfter(result);
-              return result;
-            } finally {
-              this.compacting = false;
-              this.streamSequence += 1;
-            }
-          });
-        } finally {
-          this.invalidateSessionLists();
-        }
-      }
-
-      case "abort_compaction":
-        // No dedicated RPC command; a plain abort cancels the in-flight turn
-        // including compaction work.
-        await this.withFinalRunningNotification(() => this.proc.sendCommand({ type: "abort" }));
-        return null;
-
-      case "set_session_name": {
-        const name = (command.name as string | undefined)?.trim();
-        if (!name) throw new Error("Session name cannot be empty");
-        await this.proc.sendCommand({ type: "set_session_name", name });
-        this._sessionName = name;
-        this.invalidateSessionLists();
-        return null;
-      }
-
-      case "get_session_stats": {
-        const stats = await this.proc.sendCommand<Omit<SessionStatsInfo, "sessionName">>({ type: "get_session_stats" });
-        return { ...stats, sessionName: this._sessionName };
-      }
-
-      case "get_last_assistant_text": {
-        const data = await this.proc.sendCommand<{ text: string | null }>({ type: "get_last_assistant_text" });
-        return { text: data.text ?? "" };
-      }
-
-      case "get_commands": {
-        const data = await this.proc.sendCommand<{ commands: RpcAvailableSlashCommand[] }>({
-          type: "get_available_commands",
-        });
-        return { ...data, commands: data.commands.filter((command) => command.name !== SESSION_EDIT_COMMAND) };
-      }
-
-      case "reload": {
-        await this.restart();
-        return { success: true };
-      }
-
-      case "extension_ui_response": {
-        const { id, ...rest } = command as { id: string; [key: string]: unknown };
-        const pendingAsk = this.pendingUiRequests.get(id)?.method === "ask";
-        // A pending ask accepts only its answers or a cancel; anything else would
-        // drop it from reconnect replay while omp rejects the payload.
-        if (("answers" in rest || pendingAsk) && !isAskAnswers(rest.answers) && !(pendingAsk && rest.cancelled === true)) {
-          throw new WebRpcError("Invalid ask dialog answers", "invalid_ask_answers");
-        }
-        const wasPending = this.pendingUiRequests.has(id);
-        this.forgetPendingUiRequest(id);
-        this.proc.sendFrame({ type: "extension_ui_response", id, ...rest });
-        // omp sends no cancel for an answered dialog; other tabs on this
-        // session would keep showing it, so settle it for them here.
-        if (wasPending) this.emit({ type: "extension_ui_request", id: `cancel:${id}`, method: "cancel", targetId: id });
-        return null;
-      }
-
-      case "bash": {
-        // omp's RPC bash command is `{type:"bash", command}` only (rpc-types.ts)
-        // — there is no excludeFromContext option anywhere in modes/rpc. Running
-        // a `!!` command anyway would put output the user meant to keep private
-        // into the model context, so refuse instead of silently ignoring it.
-        if (command.excludeFromContext === true) {
-          throw new WebRpcError(BASH_EXCLUDE_MESSAGE, "bash_exclude_unsupported");
-        }
-        if (this.isRunning()) {
-          throw new Error("Cannot run a shell command while the session is busy");
-        }
-        this.bashRunning = true;
-        notifyRunningChange();
-        try {
-          return await this.proc.sendCommand<BashResultInfo>({ type: "bash", command: command.command as string });
-        } finally {
-          this.bashRunning = false;
-          this.invalidateSessionLists();
-          notifyRunningChange();
-        }
-      }
-
-      case "set_host_tools": {
-        const tools = Array.isArray(command.tools) ? command.tools as Array<{ name?: unknown; [key: string]: unknown }> : [];
-        const valid = tools.filter((t) => typeof t.name === "string" && t.name);
-        // Merge the server agent tools (#275) into every registration when
-        // the gate is on, so a later UI registration cannot drop them and
-        // a no-tab session keeps them after its startup registration.
-        // With the gate off the registration is exactly what the caller
-        // asked for, so existing behavior and tests are unchanged.
-        const merged = loadWebServerSettings().agentToolsEnabled
-          ? [...valid, ...AGENT_TOOL_DEFINITIONS.filter((t) => !valid.some((v) => v.name === t.name))]
-          : valid;
-        this.hostToolNames = new Set(merged.map((t) => t.name as string));
-        await this.proc.sendCommand({ type: "set_host_tools", tools: merged });
-        return null;
-      }
-
-      case "host_tool_result": {
-        if (typeof command.id === "string") this.pendingHostTools.delete(command.id);
-        this.proc.sendFrame(command as { type: string; [key: string]: unknown });
-        return null;
-      }
-
-      case "set_host_uri_schemes": {
-        const schemes = Array.isArray(command.schemes) ? command.schemes as Array<{ scheme?: unknown; writable?: unknown; [key: string]: unknown }> : [];
-        this.hostUriSchemes = new Map();
-        for (const entry of schemes) {
-          if (typeof entry.scheme === "string" && entry.scheme) {
-            this.hostUriSchemes.set(entry.scheme, { writable: entry.writable === true });
-          }
-        }
-        await this.proc.sendCommand({ type: "set_host_uri_schemes", schemes });
-        return null;
-      }
-
-      case "host_uri_result": {
-        if (typeof command.id === "string") this.pendingHostUris.delete(command.id);
-        this.proc.sendFrame(command as { type: string; [key: string]: unknown });
-        return null;
-      }
-
-      default: {
-        if (PASSTHROUGH_COMMANDS.has(type)) {
-          if (type === "abort_and_prompt") {
-            this.responseObserved = false;
-            this.responseRunActive = false;
-            this.streamSequence += 1;
-          }
-          const result: unknown = await this.proc.sendCommand(
-            command as { type: string },
-            type === "predict_word" ? PREDICT_WORD_TIMEOUT_MS : undefined,
-          );
-          if (type === "set_thinking_level") this.invalidateSessionLists();
-          return result ?? null;
-        }
-        throw new Error(`Unsupported command: ${type}`);
-      }
-    }
+    return dispatchCommand.call(this as never, command);
   }
 
-  /**
-   * Degrade a prompt/steer frame into omp's follow-up queue while omp-web's own
-   * `!!` shell command owns the child (`bashRunning`, set for the whole `bash`
-   * RPC). omp would refuse a prompt then — and aborting or erroring loses the
-   * user's message mid-task — so the message is forwarded as `follow_up`
-   * instead: the queue stays omp-owned (its `queue_update`/`get_state`
-   * snapshots feed every client's chips) and omp delivers the message after the
-   * shell command finishes, exactly as a queued follow-up sent during a run.
-   * The reply carries the degradation so the client can tell the user their
-   * message was queued, not steered.
-   */
   private async queueWhileShellRunning(command: Record<string, unknown>): Promise<unknown> {
-    const images = toImageContents(command.images);
-    await this.proc.sendCommand({
-      type: "follow_up",
-      message: command.message as string,
-      ...(images ? { images } : {}),
-    });
-    return { queued: true, queue: "followUp", reason: "shellRunning" };
+    return queueWhileShellRunning.call(this as never, command);
   }
 
   destroy(reason = "unspecified"): void {
-    void this.destroyAndWait(reason);
+    destroy.call(this as never, reason);
   }
 
-  /** Destroy and resolve only after the omp child has fully exited. Callers
-   * that delete the session file afterwards must await this — omp flushes
-   * session state on shutdown and would otherwise recreate the file. */
   async destroyAndWait(reason = "unspecified"): Promise<void> {
-    // Re-entrant calls join the in-flight dispose; without this a new spawn
-    // can overlap the old child's shutdown (see startRpcSession).
-    if (this.destroyPromise) return this.destroyPromise;
-    if (!this._alive) return;
-    console.info("[omp-web] session-dispose", JSON.stringify({ sessionId: this._sessionId, reason, running: this.isRunning(), pendingDialogs: this.pendingUiRequests.size, at: new Date().toISOString(), caller: new Error().stack?.split("\n").slice(2, 5).map((line) => line.trim()) }));
-    this._alive = false;
-    this.streaming = false;
-    this.promptRunning = false;
-    this.compacting = false;
-    this.responseObserved = false;
-    this.responseRunActive = false;
-    this.clearLiveSnapshots();
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    if (this.reapTimer) {
-      clearTimeout(this.reapTimer);
-      this.reapTimer = null;
-    }
-    if (this.sessionFileSignalTimer) {
-      clearTimeout(this.sessionFileSignalTimer);
-      this.sessionFileSignalTimer = null;
-    }
-    this.unsubscribeFrames?.();
-    this.clearPendingUiRequests();
-    this.promptDispatchPendingCount = 0;
-    this.awaitingAgentStart = false;
-    this.awaitingAgentStartDeadline = 0;
-    this.continuationGraceUntil = 0;
-    if (this.mcpListWaiter) {
-      clearTimeout(this.mcpListWaiter.timer);
-      this.mcpListWaiter.reject(new Error("Session was closed while loading MCP servers"));
-      this.mcpListWaiter = null;
-    }
-    const disposed = this.proc.dispose().catch(() => {});
-    this.destroyPromise = disposed;
-    this.pendingHostTools.clear();
-    this.hostToolNames.clear();
-    this.pendingHostUris.clear();
-    this.hostUriSchemes.clear();
-    notifyRunningChange();
-    await disposed;
-    this.onDestroyCallback?.();
+    return destroyAndWait.call(this as never, reason);
   }
 }
 
@@ -2668,3 +1842,18 @@ export async function startRpcSession(
   locks.set(sessionId, starting);
   return starting;
 }
+
+
+bindSessionLifecycle({
+  notifyRunningChange,
+  getExitedMap,
+  buildSessionSpawnArgs,
+  launchConfigForCwd,
+});
+bindCommandDispatch({
+  notifyRunningChange,
+  patchEstimatedTokensAfter,
+});
+bindSessionTitle({
+  notifyRunningChange,
+});

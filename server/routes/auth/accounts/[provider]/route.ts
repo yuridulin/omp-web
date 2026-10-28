@@ -2,8 +2,6 @@ import { NextResponse } from "../../../../http";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { runUtilityCommand } from "@/lib/omp/rpc-utility";
 
-export const dynamic = "force-dynamic";
-
 /** Entry of omp's `get_logout_accounts` response. Labels never carry a raw key. */
 interface OmpProviderAccount {
   credentialId: number;

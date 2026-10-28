@@ -1,5 +1,5 @@
 import { NextResponse } from "../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { disposeUtilityRpc } from "@/lib/omp/rpc-utility";
 import {
@@ -9,8 +9,6 @@ import {
   writeModelsConfig,
   type ModelsFileConfig,
 } from "@/lib/omp/models-config";
-
-export const dynamic = "force-dynamic";
 
 export async function GET() {
   const file = readModelsConfigFile();
@@ -55,6 +53,6 @@ export async function PUT(req: Request) {
     disposeUtilityRpc();
     return NextResponse.json({ success: true });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

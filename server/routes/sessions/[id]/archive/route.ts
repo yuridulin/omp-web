@@ -17,7 +17,7 @@ export async function POST(
   const { id } = await params;
   try {
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     const filePath = resolved.filePath;
     // Parent-session paths are native branch metadata. Moving only a parent
     // would leave active children pointing at a path that no longer exists,

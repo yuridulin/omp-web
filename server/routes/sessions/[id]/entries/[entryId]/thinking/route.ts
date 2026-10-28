@@ -1,6 +1,6 @@
 import { NextResponse } from "../../../../../../http";
 import { getSessionEntries } from "@/lib/session-reader";
-import { apiErrorResponse, resolveSessionPathOr404 } from "@/lib/api-utils";
+import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 import { isRecord } from "@/lib/type-guards";
 
 export async function GET(
@@ -16,7 +16,7 @@ export async function GET(
 
   try {
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     const filePath = resolved.filePath;
 
     // Lenient JSONL parsing keeps omp's malformed-line tolerance.
@@ -32,6 +32,6 @@ export async function GET(
 
     return NextResponse.json({ thinking: block.thinking });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

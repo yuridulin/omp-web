@@ -5,7 +5,6 @@ import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url);
 const { buildCatalog, filterCommands, parseCommandLine, resolveInput } = await jiti.import("./slash");
 const { WEB_COMMANDS } = await jiti.import("./web-commands");
-const legacy = await jiti.import("../lib/web-slash-commands.ts");
 
 function runtime(name, options = {}) {
   return { name, source: "runtime", requiresArgs: false, ...options };
@@ -93,41 +92,63 @@ test("unknown commands and non-commands are forwarded as prompt text", () => {
   assert.deepEqual(resolveInput(catalog, ""), { kind: "prompt" });
 });
 
-test("every legacy web command expands to the identical prompt", () => {
+test("web commands expand through the catalog", () => {
   const catalog = buildCatalog([], WEB_COMMANDS);
   assert.deepEqual(
     WEB_COMMANDS.map((entry) => entry.name),
-    legacy.WEB_SLASH_COMMANDS.map((command) => command.name),
+    ["goal", "plan", "review", "fix", "test", "explain", "simplify", "commit", "advisor", "loop"],
   );
-  assert.ok(WEB_COMMANDS.every((entry) => entry.source === "web"));
+  assert.ok(WEB_COMMANDS.every((entry) => entry.source === "web" && typeof entry.buildPrompt === "function"));
+  assert.deepEqual(
+    new Set(WEB_COMMANDS.filter((entry) => entry.requiresArgs).map((entry) => entry.name)),
+    new Set(["goal", "plan", "fix", "test", "explain", "simplify", "loop"]),
+  );
 
-  const samples = ["", "ship the export", "5 polish the edges", "50 clamp the retries", "0 keep trying", "feat: add catalog"];
+  const goal = resolveInput(catalog, "/goal ship the export");
+  assert.equal(goal.kind, "expand");
+  assert.match(goal.prompt, /Work toward this goal for the rest of the session/);
+  assert.match(goal.prompt, /ship the export/);
+  assert.equal(resolveInput(catalog, "/goal").kind, "usage");
+  assert.equal(resolveInput(catalog, "/goal ").kind, "usage");
+  assert.equal(resolveInput(catalog, "/GOAL ship").kind, "prompt");
 
-  for (const command of legacy.WEB_SLASH_COMMANDS) {
-    const entry = WEB_COMMANDS.find((candidate) => candidate.name === command.name);
-    assert.ok(entry, `missing ${command.name}`);
-    assert.equal(entry.requiresArgs, command.requiresArgs);
-    for (const args of samples) {
-      assert.equal(entry.buildPrompt(args), command.buildPrompt(args), `${command.name} prompt drift for ${JSON.stringify(args)}`);
-    }
+  const review = WEB_COMMANDS.find((entry) => entry.name === "review");
+  assert.ok(review?.buildPrompt);
+  assert.match(review.buildPrompt(""), /current project state and recent changes/);
+  assert.match(review.buildPrompt("lib/model-catalog.ts"), /Review lib\/model-catalog\.ts for bugs/);
+  const reviewResolved = resolveInput(catalog, "/review");
+  assert.equal(reviewResolved.kind, "expand");
+  assert.match(reviewResolved.prompt, /current project state and recent changes/);
 
-    const requiredArgs = command.requiresArgs ? "do the thing" : "";
-    const expected = legacy.expandWebSlashCommand(`/${command.name} ${requiredArgs}`);
-    assert.notEqual(expected.kind, "not-web");
-    const resolved = resolveInput(catalog, `/${command.name} ${requiredArgs}`);
-    if (expected.kind === "usage-error") {
-      assert.equal(resolved.kind, "usage");
-    } else {
-      assert.equal(resolved.kind, "expand");
-      assert.equal(resolved.prompt, expected.prompt);
-    }
+  const commit = WEB_COMMANDS.find((entry) => entry.name === "commit");
+  assert.ok(commit?.buildPrompt);
+  assert.match(commit.buildPrompt(""), /clear conventional commit message/);
+  assert.match(commit.buildPrompt("feat: add catalog"), /commit the current changes with this message: "feat: add catalog"/);
 
-    const noArgs = resolveInput(catalog, `/${command.name}`);
-    const legacyNoArgs = legacy.expandWebSlashCommand(`/${command.name}`);
-    if (legacyNoArgs.kind === "usage-error") assert.equal(noArgs.kind, "usage");
-    else {
-      assert.equal(noArgs.kind, "expand");
-      assert.equal(noArgs.prompt, legacyNoArgs.prompt);
-    }
-  }
+  const advisor = WEB_COMMANDS.find((entry) => entry.name === "advisor");
+  assert.ok(advisor?.buildPrompt);
+  assert.match(advisor.buildPrompt(""), /independent advisor reviewing the current work/);
+  assert.match(advisor.buildPrompt("the retry logic"), /reviewing this work: the retry logic/);
+  const advisorResolved = resolveInput(catalog, "/advisor the retry logic");
+  assert.equal(advisorResolved.kind, "expand");
+  assert.match(advisorResolved.prompt, /the retry logic/);
+
+  const loop = WEB_COMMANDS.find((entry) => entry.name === "loop");
+  assert.ok(loop?.buildPrompt);
+  const counted = loop.buildPrompt("3 run the test suite");
+  assert.match(counted, /up to 3 attempts/);
+  assert.ok(counted.includes("run the test suite"));
+  assert.match(loop.buildPrompt("run the test suite"), /up to 3 attempts/);
+  assert.match(loop.buildPrompt("0 keep trying"), /up to 3 attempts/);
+  assert.match(loop.buildPrompt("5 polish the edges"), /up to 5 attempts/);
+  assert.match(loop.buildPrompt("50 clamp the retries"), /up to 10 attempts/);
+  assert.match(loop.buildPrompt("999 run the test suite"), /up to 10 attempts/);
+  const loopResolved = resolveInput(catalog, "/loop 2 fix the flake");
+  assert.equal(loopResolved.kind, "expand");
+  assert.match(loopResolved.prompt, /up to 2 attempts/);
+  assert.equal(resolveInput(catalog, "/loop").kind, "usage");
+
+  assert.equal(resolveInput(catalog, "just a message").kind, "prompt");
+  assert.equal(resolveInput(catalog, "/compact").kind, "prompt");
+  assert.equal(resolveInput(catalog, "/vibe go fast").kind, "prompt");
 });

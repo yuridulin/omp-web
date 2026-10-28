@@ -2,7 +2,7 @@ import { NextResponse } from "../../../../http";
 import { existsSync } from "fs";
 import { loadSessionFile } from "@/lib/omp/session-files";
 import { buildSessionContext, getSessionContextBoundary, getSessionEntriesForDisplayAsync, getSessionHistoryPage, readSessionHeader, SessionFileTooLargeError } from "@/lib/session-reader";
-import { apiErrorResponse, resolveSessionPathOr404 } from "@/lib/api-utils";
+import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 import { getRpcSession } from "@/lib/rpc-manager";
 import { MAX_SYNC_MESSAGES, parseHistoryCursor, selectSessionHistory, type SessionHistoryCursor, type SessionSyncResponse } from "@/lib/session-sync";
 
@@ -17,7 +17,7 @@ function contextErrorResponse(error: unknown): NextResponse {
       { status: 413 },
     );
   }
-  return apiErrorResponse(error);
+  return NextResponse.json(apiErrorBody(error), { status: 500 });
 }
 
 export async function GET(
@@ -63,7 +63,7 @@ export async function GET(
 
   try {
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) {
+    if ("notFound" in resolved) {
       // OMP may not create the file until the first assistant message is
       // committed. A live wrapper can still recover that first partial reply,
       // and its persisted boundary is empty (the next prompt must not 404).
@@ -81,7 +81,7 @@ export async function GET(
         };
         return NextResponse.json(response, { headers: { "Cache-Control": "no-store" } });
       }
-      return resolved.response;
+      return NextResponse.json(resolved.notFound, { status: 404 });
     }
     const filePath = resolved.filePath;
 

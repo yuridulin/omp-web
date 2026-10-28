@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { stat } from "fs/promises";
 import {
   getBrowseStartDirectory,
@@ -40,6 +40,6 @@ export async function GET(request: NextRequest) {
       directories,
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

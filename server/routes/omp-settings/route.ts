@@ -4,8 +4,6 @@ import { disposeUtilityRpc, runUtilityCommand, type OmpModel } from "@/lib/omp/r
 import { readNativeSettings, writeNativeSettings, type NativeSettings } from "@/lib/omp/settings-config";
 import { assertNoAmbiguousModelScopes } from "@/lib/model-scope";
 
-export const dynamic = "force-dynamic";
-
 export function GET() {
   try {
     return NextResponse.json(readNativeSettings());

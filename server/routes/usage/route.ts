@@ -1,9 +1,7 @@
 import { NextResponse } from "../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { getUsageReport } from "@/lib/usage-service";
 import type { UsageGranularity, UsageTimeRange } from "@/lib/usage-types";
-
-export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
@@ -40,6 +38,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json(report);
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

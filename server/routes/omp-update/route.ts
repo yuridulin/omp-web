@@ -1,5 +1,4 @@
 import { NextResponse } from "../../http";
-import { isApiRequestOriginAllowed, shouldCheckApiRequestOrigin } from "@/lib/request-security";
 import { parseJsonWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
 import { checkOmpUpdate } from "@/lib/omp/updates";
 import { restartAllRpcSessions } from "@/lib/rpc-manager";
@@ -13,8 +12,6 @@ import {
   validateCommitSelfUpdate,
 } from "@/lib/self-update";
 
-export const dynamic = "force-dynamic";
-
 const OMP_KIND = "omp" as const;
 
 function errorResponse(error: unknown): NextResponse {
@@ -25,9 +22,6 @@ function errorResponse(error: unknown): NextResponse {
 }
 
 export async function POST(request: Request) {
-  if (shouldCheckApiRequestOrigin(request) && !isApiRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "Cross-origin API requests are not allowed", code: "cross_origin_forbidden" }, { status: 403 });
-  }
   if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
     return NextResponse.json({ error: "Content-Type must be application/json", code: "unsupported_media_type" }, { status: 415 });
   }

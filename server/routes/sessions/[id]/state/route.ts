@@ -1,6 +1,6 @@
 import { NextResponse } from "../../../../http";
 import { getExitedRpcSession, getRpcSession, WebRpcError } from "@/lib/rpc-manager";
-import { apiErrorResponse, resolveSessionPathOr404 } from "@/lib/api-utils";
+import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 
 export async function GET(
   _req: Request,
@@ -28,9 +28,9 @@ export async function GET(
     if (exited) return NextResponse.json({ running: false, exited });
 
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     return NextResponse.json({ running: false });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

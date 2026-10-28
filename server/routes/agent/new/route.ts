@@ -1,5 +1,5 @@
 import { NextResponse } from "../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { existsSync } from "fs";
 import { randomUUID } from "crypto";
 import { allowFileRoot } from "@/lib/file-access";
@@ -22,7 +22,7 @@ function newSessionErrorResponse(error: unknown) {
       { status: 400 },
     );
   }
-  return apiErrorResponse(error);
+  return NextResponse.json(apiErrorBody(error), { status: 500 });
 }
 // POST /api/agent/new  body: { cwd: string; type: string; message?: string; ... }
 // Spawns a brand-new omp session. Most calls immediately send the first command;

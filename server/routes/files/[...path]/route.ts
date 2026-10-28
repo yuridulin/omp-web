@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { getContentDisposition } from "@/lib/content-disposition";
 import fs from "fs";
 import path from "path";
@@ -524,6 +524,6 @@ export async function GET(
 
     return NextResponse.json({ entries, path: filePath });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }

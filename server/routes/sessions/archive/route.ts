@@ -1,5 +1,5 @@
 import { NextResponse } from "../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { listArchivedSessions, restoreArchivedSession } from "@/lib/omp/archive";
 import { invalidateSessionListCache } from "@/lib/session-reader";
 import type { ArchivedSessionInfo } from "@/lib/types";
@@ -23,7 +23,7 @@ export async function GET() {
     }));
     return NextResponse.json({ archives: response }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
 

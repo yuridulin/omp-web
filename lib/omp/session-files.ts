@@ -22,7 +22,37 @@ import * as fsRuntime from "fs";
 import * as path from "path";
 import { StringDecoder } from "string_decoder";
 import { gunzipSync, gzipSync } from "zlib";
+import {
+  SESSION_TITLE_SLOT_BYTES,
+  buildSessionTree,
+  getLeafEntryId,
+  parseJsonlLenient,
+  parseTitleSlotHead,
+  parseTitleSlotLine,
+  serializeTitleSlot,
+  type SessionTitleSlot,
+  type SessionTitleUpdate,
+} from "../../core/session";
+import {
+  SESSION_LIST_PREFIX_BYTES,
+  SESSION_LIST_SUFFIX_BYTES,
+  firstUserMessageFromLines,
+  scanSessionInfo as scanSessionWindows,
+  type ScannedSessionInfo,
+  type SessionStatus,
+} from "../../core/session-list";
 import { isRecord } from "../type-guards";
+
+export {
+  SESSION_TITLE_SLOT_BYTES,
+  buildSessionTree,
+  getLeafEntryId,
+  parseJsonlLenient,
+  parseTitleSlotLine,
+  serializeTitleSlot,
+};
+export type { SessionTitleSlot, SessionTitleUpdate, SessionStatus };
+export type OmpSessionInfo = ScannedSessionInfo;
 
 // Keep user-session directory traversal out of Next's static NFT globbing.
 // These paths are resolved and authorized at request time by omp-web.
@@ -32,7 +62,6 @@ import type {
   SessionEntry,
   SessionHeader,
   SessionTitleSource,
-  SessionTreeNode,
 } from "../types";
 import { getArchivedSessionsDir, getBlobsDir, getSessionsDir } from "./paths";
 import { sessionPathKey } from "../paths";
@@ -51,105 +80,12 @@ import { sessionPathKey } from "../paths";
  * content-addressed blob store and referenced as "blob:sha256:<hex>".
  */
 
-export const SESSION_TITLE_SLOT_BYTES = 256;
 export const CURRENT_SESSION_VERSION = 3;
 
 // ============================================================================
-// Title slot (fixed-width line 1)
+// Title slot (fixed-width line 1). Parsing and serialization live in core;
+// this host only reads the fixed-size head window.
 // ============================================================================
-
-export interface SessionTitleSlot {
-  type: "title";
-  v: 1;
-  title: string;
-  source?: SessionTitleSource;
-  updatedAt: string;
-  pad: string;
-}
-
-export interface SessionTitleUpdate {
-  title?: string;
-  source?: SessionTitleSource;
-  updatedAt: string;
-}
-
-function titleSlotLine(
-  title: string,
-  source: SessionTitleSource | undefined,
-  updatedAt: string,
-  pad: string,
-): string {
-  const slot: SessionTitleSlot = source
-    ? { type: "title", v: 1, title, source, updatedAt, pad }
-    : { type: "title", v: 1, title, updatedAt, pad };
-  return `${JSON.stringify(slot)}\n`;
-}
-
-/** Longest code-point prefix of `title` whose serialized line fits the slot. */
-function truncateTitleForSlot(
-  title: string,
-  source: SessionTitleSource | undefined,
-  updatedAt: string,
-): string {
-  const codePoints = [...title];
-  let low = 0;
-  let high = codePoints.length;
-  let best = "";
-  while (low <= high) {
-    const mid = (low + high) >>> 1;
-    const candidate = codePoints.slice(0, mid).join("");
-    if (Buffer.byteLength(titleSlotLine(candidate, source, updatedAt, ""), "utf8") <= SESSION_TITLE_SLOT_BYTES) {
-      best = candidate;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return best;
-}
-
-function isSessionTitleSource(value: unknown): value is SessionTitleSource {
-  return value === "auto" || value === "user";
-}
-
-/** Parse a physical title-slot JSONL line. Returns undefined for anything else. */
-export function parseTitleSlotLine(line: string): SessionTitleSlot | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  if (record.type !== "title" || record.v !== 1) return undefined;
-  if (typeof record.title !== "string" || typeof record.updatedAt !== "string" || typeof record.pad !== "string") {
-    return undefined;
-  }
-  if (record.source !== undefined && !isSessionTitleSource(record.source)) return undefined;
-  const slot: SessionTitleSlot = {
-    type: "title",
-    v: 1,
-    title: record.title,
-    updatedAt: record.updatedAt,
-    pad: record.pad,
-  };
-  if (record.source) slot.source = record.source as SessionTitleSource;
-  return slot;
-}
-
-/** Serialize the title slot to exactly 256 UTF-8 bytes including the newline. */
-export function serializeTitleSlot(update: SessionTitleUpdate): string {
-  const title = truncateTitleForSlot(update.title ?? "", update.source, update.updatedAt);
-  const unpadded = titleSlotLine(title, update.source, update.updatedAt, "");
-  const padBytes = SESSION_TITLE_SLOT_BYTES - Buffer.byteLength(unpadded, "utf8");
-  if (padBytes < 0) throw new Error("Session title slot metadata exceeds fixed slot size");
-  const line = titleSlotLine(title, update.source, update.updatedAt, " ".repeat(padBytes));
-  if (Buffer.byteLength(line, "utf8") !== SESSION_TITLE_SLOT_BYTES) {
-    throw new Error("Session title slot serialization failed to produce fixed-width output");
-  }
-  return line;
-}
 
 /** Read only the fixed-size head window to detect a physical title slot. */
 export function readTitleSlot(filePath: string): SessionTitleSlot | undefined {
@@ -162,34 +98,15 @@ export function readTitleSlot(filePath: string): SessionTitleSlot | undefined {
   try {
     const buffer = Buffer.allocUnsafe(SESSION_TITLE_SLOT_BYTES);
     const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
-    const head = buffer.subarray(0, bytesRead).toString("utf8");
-    const newlineIndex = head.indexOf("\n");
-    if (newlineIndex < 0) return undefined;
-    return parseTitleSlotLine(head.slice(0, newlineIndex));
+    return parseTitleSlotHead(buffer.subarray(0, bytesRead).toString("utf8"));
   } finally {
     closeSync(fd);
   }
 }
 
 // ============================================================================
-// Lenient JSONL parsing + migrations
+// Migrations (lenient JSONL parsing lives in core)
 // ============================================================================
-
-/** JSON.stringify never emits raw newlines, so line splitting is a faithful
- * lenient JSONL parse: malformed/truncated lines are skipped, not fatal. */
-export function parseJsonlLenient<T>(body: string): T[] {
-  const out: T[] = [];
-  for (const rawLine of body.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    try {
-      out.push(JSON.parse(line) as T);
-    } catch {
-      // Skip malformed line (torn write, prefix-window truncation).
-    }
-  }
-  return out;
-}
 
 type MutableEntry = SessionEntry & Record<string, unknown>;
 
@@ -577,155 +494,8 @@ export function readSessionHeaderSync(filePath: string): SessionHeader | null {
 }
 
 // ============================================================================
-// Tree + leaf helpers
+// Session listing. Window parsing lives in core; this host reads the slices.
 // ============================================================================
-
-/**
- * Build the session tree: one root for a well-formed session, orphaned entries
- * (broken parent chain) become extra roots. Labels come from label entries in
- * append order (a later label overrides; an empty label clears).
- */
-export function buildSessionTree(entries: SessionEntry[]): SessionTreeNode[] {
-  const labels = new Map<string, string>();
-  for (const entry of entries) {
-    if (entry.type !== "label") continue;
-    if (entry.label) labels.set(entry.targetId, entry.label);
-    else labels.delete(entry.targetId);
-  }
-
-  const nodes = new Map<string, SessionTreeNode>();
-  const roots: SessionTreeNode[] = [];
-  for (const entry of entries) {
-    nodes.set(entry.id, { entry, children: [], label: labels.get(entry.id) });
-  }
-  for (const entry of entries) {
-    const node = nodes.get(entry.id)!;
-    if (entry.parentId === null || entry.parentId === entry.id) {
-      roots.push(node);
-      continue;
-    }
-    const parent = nodes.get(entry.parentId);
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-  }
-
-  const byTimestamp = (a: SessionTreeNode, b: SessionTreeNode) =>
-    new Date(a.entry.timestamp).getTime() - new Date(b.entry.timestamp).getTime();
-  const stack = [...roots];
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    node.children.sort(byTimestamp);
-    stack.push(...node.children);
-  }
-  return roots;
-}
-
-/** The persisted leaf: the last appended entry (matches omp's loaded-session leaf). */
-export function getLeafEntryId(entries: SessionEntry[]): string | null {
-  return entries.length > 0 ? entries[entries.length - 1].id : null;
-}
-
-// ============================================================================
-// Session listing (port of session-listing.ts)
-// ============================================================================
-
-export type SessionStatus = "complete" | "interrupted" | "aborted" | "error" | "pending" | "unknown";
-
-export interface OmpSessionInfo {
-  path: string;
-  id: string;
-  cwd: string;
-  title?: string;
-  parentSessionPath?: string;
-  created: Date;
-  modified: Date;
-  messageCount: number;
-  size: number;
-  firstMessage: string;
-  status?: SessionStatus;
-  /** Timestamp of the last message entry in the tail window (when scanned with status). */
-  lastMessageAt?: Date;
-}
-
-const SESSION_LIST_PREFIX_BYTES = 4096;
-const SESSION_LIST_SUFFIX_BYTES = 32_768;
-
-function decodeJsonStringFragment(value: string): string {
-  const safeValue = value.endsWith("\\") ? value.slice(0, -1) : value;
-  try {
-    return JSON.parse(`"${safeValue}"`) as string;
-  } catch {
-    return safeValue
-      .replace(/\\n/g, "\n")
-      .replace(/\\r/g, "\r")
-      .replace(/\\t/g, "\t")
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, "\\");
-  }
-}
-
-/** Raw-text string-property scan used on the possibly-truncated prefix window. */
-function extractStringProperty(source: string, name: string, startIndex = 0): string | undefined {
-  const propertyIndex = source.indexOf(`"${name}"`, startIndex);
-  if (propertyIndex === -1) return undefined;
-  const colonIndex = source.indexOf(":", propertyIndex + name.length + 2);
-  if (colonIndex === -1) return undefined;
-
-  let valueIndex = colonIndex + 1;
-  while (valueIndex < source.length) {
-    const char = source.charCodeAt(valueIndex);
-    if (char !== 32 && char !== 9 && char !== 10 && char !== 13) break;
-    valueIndex++;
-  }
-  if (source.charCodeAt(valueIndex) !== 34) return undefined;
-
-  const valueStart = valueIndex + 1;
-  let escaped = false;
-  for (let i = valueStart; i < source.length; i++) {
-    const char = source.charCodeAt(i);
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === 92) {
-      escaped = true;
-      continue;
-    }
-    if (char === 34) {
-      return decodeJsonStringFragment(source.slice(valueStart, i));
-    }
-  }
-  return decodeJsonStringFragment(source.slice(valueStart));
-}
-
-function countMessageMarkers(content: string): number {
-  let count = 0;
-  let index = 0;
-  while (index < content.length) {
-    const typeIndex = content.indexOf('"type"', index);
-    if (typeIndex === -1) break;
-    const colonIndex = content.indexOf(":", typeIndex + 6);
-    if (colonIndex === -1) break;
-    if (extractStringProperty(content, "type", typeIndex) === "message") count++;
-    index = colonIndex + 1;
-  }
-  return count;
-}
-
-function extractFirstDisplayMessageFromPrefix(content: string): string | undefined {
-  let fallback: string | undefined;
-  let index = content.indexOf('"role"');
-  while (index !== -1) {
-    const role = extractStringProperty(content, "role", index);
-    const text = extractStringProperty(content, "content", index) ?? extractStringProperty(content, "text", index);
-    if (text) {
-      if (role === "user") return text;
-      if (!fallback && (role === "developer" || role === "assistant")) fallback = text;
-    }
-    index = content.indexOf('"role"', index + 6);
-  }
-  return fallback;
-}
 
 // Injected context (rules, skills, memory recall) can push the first user
 // message past the 4 KiB prefix; stream lines until one turns up.
@@ -733,175 +503,15 @@ function scanFirstUserMessage(filePath: string): string {
   let text = "";
   try {
     forEachFileLineSync(filePath, (line) => {
-      if (!line.includes('"user"') && !line.includes('"skill-prompt"')) return;
-      try {
-        const entry = JSON.parse(line) as {
-          type?: string;
-          customType?: string;
-          content?: unknown;
-          message?: { role?: string; content?: unknown };
-        };
-        if (entry.type === "message" && entry.message?.role === "user") {
-          text = extractTextFromContent(entry.message.content);
-          return !text;
-        }
-        if (entry.type === "custom_message" && entry.customType === "skill-prompt") {
-          const content = typeof entry.content === "string" ? entry.content : "";
-          const parts = content.split(/\nUser:\s*/);
-          if (parts.length > 1 && parts[parts.length - 1].trim()) {
-            text = parts[parts.length - 1].trim();
-            return !text;
-          }
-          const skillMatch = /User invoked the "([^"]+)" skill/.exec(content);
-          if (skillMatch && skillMatch[1]) {
-            text = `Skill: ${skillMatch[1]}`;
-            return !text;
-          }
-        }
-      } catch {
-        // Torn or hand-edited line: skip it, as parseJsonlLenient does.
-      }
+      const found = firstUserMessageFromLines([line]);
+      if (!found) return;
+      text = found;
+      return false;
     });
   } catch {
     // A line past the JS string cap: keep listing the session without a first message.
   }
   return text;
-}
-
-function extractTextFromContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const text: string[] = [];
-  for (const block of content) {
-    if (isRecord(block) && block.type === "text" && typeof block.text === "string") text.push(block.text);
-  }
-  return text.join(" ");
-}
-
-interface TailMessage {
-  role?: string;
-  stopReason?: string;
-  content?: unknown;
-}
-
-function statusFromTailMessage(message: TailMessage): SessionStatus {
-  switch (message.role) {
-    case "assistant": {
-      switch (message.stopReason) {
-        case "error":
-          return "error";
-        case "aborted":
-          return "aborted";
-        case "length":
-          return "interrupted";
-      }
-      const content = message.content;
-      if (Array.isArray(content) && content.some((block) => isRecord(block) && block.type === "toolCall")) {
-        return "interrupted";
-      }
-      return "complete";
-    }
-    case "toolResult":
-      return "interrupted";
-    case "user":
-      return "pending";
-    default:
-      return "unknown";
-  }
-}
-
-/** The tail window's last message entry: lifecycle status plus its timestamp. */
-function scanTailMessage(suffix: string): { status: SessionStatus; lastMessageAt?: Date } {
-  if (!suffix) return { status: "unknown" };
-  const lines = suffix.split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
-    // Every persisted entry starts with "{" — cheaply skips blank lines and
-    // the leading partial fragment of the tail window.
-    if (line.charCodeAt(0) !== 123) continue;
-    let entry: { type?: string; timestamp?: unknown; message?: TailMessage };
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (entry.type === "message" && entry.message) {
-      const at = typeof entry.timestamp === "string" ? new Date(entry.timestamp) : undefined;
-      return { status: statusFromTailMessage(entry.message), lastMessageAt: at && !Number.isNaN(at.getTime()) ? at : undefined };
-    }
-  }
-  return { status: "unknown" };
-}
-
-interface SessionListHeader {
-  id: string;
-  cwd?: string;
-  title?: string;
-  parentSession?: string;
-  timestamp?: string;
-}
-
-function normalizeTitleOverride(title: string | undefined): string | null | undefined {
-  if (title === undefined) return undefined;
-  return title.trim() ? title : null;
-}
-
-function sessionListHeaderFromRecord(
-  record: Record<string, unknown> | undefined,
-  titleOverride?: string | null,
-): SessionListHeader | undefined {
-  if (record?.type !== "session" || typeof record.id !== "string") return undefined;
-  return {
-    id: record.id,
-    cwd: typeof record.cwd === "string" ? record.cwd : undefined,
-    title:
-      titleOverride === null
-        ? undefined
-        : (titleOverride ?? (typeof record.title === "string" ? record.title : undefined)),
-    parentSession: typeof record.parentSession === "string" ? record.parentSession : undefined,
-    timestamp: typeof record.timestamp === "string" ? record.timestamp : undefined,
-  };
-}
-
-function parseSessionListHeaderLine(line: string, titleOverride?: string | null): SessionListHeader | undefined {
-  if (extractStringProperty(line, "type") !== "session") return undefined;
-  const id = extractStringProperty(line, "id");
-  if (!id) return undefined;
-  return {
-    id,
-    cwd: extractStringProperty(line, "cwd"),
-    title: titleOverride === null ? undefined : (titleOverride ?? extractStringProperty(line, "title")),
-    parentSession: extractStringProperty(line, "parentSession"),
-    timestamp: extractStringProperty(line, "timestamp"),
-  };
-}
-
-/** Parse the header from the prefix window; slot titles override header titles.
- * Falls back to a raw-text scan when the header line straddles the window. */
-function parseSessionListHeader(
-  content: string,
-  entries: Array<Record<string, unknown>>,
-): SessionListHeader | undefined {
-  const firstEntry = entries[0];
-  const parsedSlotTitle = normalizeTitleOverride(
-    firstEntry?.type === "title" && typeof firstEntry.title === "string" ? firstEntry.title : undefined,
-  );
-  const parsedHeader = sessionListHeaderFromRecord(entries[firstEntry?.type === "title" ? 1 : 0], parsedSlotTitle);
-  if (parsedHeader) return parsedHeader;
-
-  let slotTitle: string | null | undefined;
-  let firstNonEmpty = true;
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    if (firstNonEmpty && extractStringProperty(line, "type") === "title") {
-      slotTitle = normalizeTitleOverride(extractStringProperty(line, "title"));
-      firstNonEmpty = false;
-      continue;
-    }
-    return parseSessionListHeaderLine(line, slotTitle);
-  }
-  return undefined;
 }
 
 function readTextSlices(
@@ -942,54 +552,23 @@ export function scanSessionInfo(
   knownStat?: { size: number; mtime: Date },
 ): OmpSessionInfo | undefined {
   try {
-    const [content, suffix, size, mtime] = readTextSlices(
+    const [prefix, suffix, size, modified] = readTextSlices(
       filePath,
       SESSION_LIST_PREFIX_BYTES,
       withStatus ? SESSION_LIST_SUFFIX_BYTES : 0,
       knownStat,
     );
-    const entries = parseJsonlLenient<Record<string, unknown>>(content);
-    const header = parseSessionListHeader(content, entries);
-    if (!header) return undefined;
-
-    let parsedMessageCount = 0;
-    let firstMessage = "";
-    let shortSummary: string | undefined;
-    for (let i = 1; i < entries.length; i++) {
-      const entry = entries[i] as { type?: string; message?: { role?: string; content?: unknown }; shortSummary?: string };
-      if (entry.type === "compaction" && typeof entry.shortSummary === "string") {
-        shortSummary = entry.shortSummary;
-      }
-      if (entry.type === "message" && entry.message) {
-        parsedMessageCount++;
-        if (entry.message.role === "user" && !firstMessage) {
-          firstMessage = extractTextFromContent(entry.message.content);
-        }
-      }
-    }
-
-    // Cap at the prefix size: the list ships firstMessage for every session.
-    // Files past the load ceiling cannot be opened anyway, so skip reading them.
-    if (!firstMessage && size > SESSION_LIST_PREFIX_BYTES && size <= MAX_SESSION_LOAD_BYTES) {
-      firstMessage = scanFirstUserMessage(filePath).slice(0, SESSION_LIST_PREFIX_BYTES);
-    }
-    firstMessage ||= extractFirstDisplayMessageFromPrefix(content) ?? "";
-    const messageCount = Math.max(parsedMessageCount, countMessageMarkers(content));
-    const tail = withStatus ? scanTailMessage(suffix) : undefined;
-    return {
+    // Files past the load ceiling cannot be opened anyway, so skip the
+    // full-file fallback that looks for a user message beyond the prefix.
+    return scanSessionWindows({
       path: filePath,
-      id: header.id,
-      cwd: header.cwd ?? "",
-      title: header.title ?? shortSummary,
-      parentSessionPath: header.parentSession,
-      created: new Date(header.timestamp ?? ""),
-      modified: mtime,
-      messageCount,
+      prefix,
+      suffix,
       size,
-      firstMessage: firstMessage || "(no messages)",
-      status: tail?.status,
-      lastMessageAt: tail?.lastMessageAt,
-    };
+      modified,
+      withStatus,
+      scanFirstUserMessage: size <= MAX_SESSION_LOAD_BYTES ? () => scanFirstUserMessage(filePath) : undefined,
+    });
   } catch {
     return undefined;
   }

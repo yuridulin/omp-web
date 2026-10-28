@@ -66,7 +66,7 @@ export async function parseFormDataWithinLimit(request: Request, maxBytes: numbe
   const reader = request.body?.getReader();
   if (!reader) return request.formData();
 
-  const chunks: BlobPart[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   let size = 0;
   try {
     while (true) {

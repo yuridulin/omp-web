@@ -1,5 +1,5 @@
 import type { AgentMessage } from "./types";
-import { isRecord } from "./guards";
+import { isRecord } from "./guards.ts";
 import type { WireEvent } from "./protocol";
 
 /**

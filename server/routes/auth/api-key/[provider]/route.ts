@@ -1,8 +1,6 @@
 import { NextResponse } from "../../../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { type OmpLoginProvider, type OmpModel, runUtilityCommand } from "@/lib/omp/rpc-utility";
-
-export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ provider: string }> };
 
@@ -37,7 +35,7 @@ export async function GET(_req: Request, { params }: Params) {
       models: modelCount,
     });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
 

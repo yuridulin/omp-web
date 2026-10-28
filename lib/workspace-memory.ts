@@ -8,15 +8,6 @@ interface StorageLike {
   removeItem(key: string): void;
 }
 
-function browserStorage(): StorageLike | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 function readEntries(storage: StorageLike): Record<string, string> {
   try {
     const raw = storage.getItem(STORAGE_KEY);
@@ -33,12 +24,12 @@ export function workspaceKeyOf(session: Pick<SessionInfo, "cwd" | "projectRoot" 
   return session.projectKey ?? session.projectRoot ?? session.cwd;
 }
 
-export function getLastOpenSession(workspace: string, storage: StorageLike | null = browserStorage()): string | null {
+export function getLastOpenSession(workspace: string, storage: StorageLike | null = null): string | null {
   if (!storage) return null;
   return readEntries(storage)[workspace] ?? null;
 }
 
-export function setLastOpenSession(workspace: string, sessionId: string, storage: StorageLike | null = browserStorage()): void {
+export function setLastOpenSession(workspace: string, sessionId: string, storage: StorageLike | null = null): void {
   if (!storage) return;
   try {
     const entries = readEntries(storage);
@@ -49,7 +40,7 @@ export function setLastOpenSession(workspace: string, sessionId: string, storage
   }
 }
 
-export function clearLastOpenSession(workspace: string, storage: StorageLike | null = browserStorage()): void {
+export function clearLastOpenSession(workspace: string, storage: StorageLike | null = null): void {
   if (!storage) return;
   try {
     const entries = readEntries(storage);

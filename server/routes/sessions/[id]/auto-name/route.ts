@@ -28,7 +28,7 @@ export async function POST(
     let rpc = getRpcSession(id);
     if (!rpc?.isAlive?.()) {
       const resolved = await resolveSessionPathOr404(id);
-      if ("response" in resolved) return resolved.response;
+      if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
       try {
         const header = readSessionHeader(resolved.filePath);
         const { cwd } = resolveSpawnCwdResult(header?.cwd);
@@ -55,7 +55,7 @@ export async function POST(
     }
 
     const resolved = await resolveSessionPathOr404(id);
-    if ("response" in resolved) return resolved.response;
+    if ("notFound" in resolved) return NextResponse.json(resolved.notFound, { status: 404 });
     const filePath = resolved.filePath;
 
     const info = scanSessionInfo(filePath, false);

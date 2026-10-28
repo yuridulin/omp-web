@@ -2,8 +2,6 @@ import { NextResponse } from "../../../../../http";
 import { resolveSessionPathOr404 } from "@/lib/api-utils";
 import { readCompletionArtifact, readSubagentTranscriptPage, resolveSubagentArtifact, subagentTranscriptPath } from "@/lib/subagent-history";
 
-export const dynamic = "force-dynamic";
-
 // Subagent ids are AdjectiveNoun names, optionally dotted for nested spawns
 // (OMP allocates hierarchical ids like `Parent.Child`). The grammar bounds the
 // value, rejects empty segments and traversal forms, and guarantees the joined
@@ -33,7 +31,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid subagent id", code: "invalid_subagent_id" }, { status: 400 });
     }
     const sessionResolved = await resolveSessionPathOr404(id);
-    if ("response" in sessionResolved) return sessionResolved.response;
+    if ("notFound" in sessionResolved) return NextResponse.json(sessionResolved.notFound, { status: 404 });
     const filePath = sessionResolved.filePath;
     const searchParams = new URL(req.url).searchParams;
     if (searchParams.get("mode") === "completion") {

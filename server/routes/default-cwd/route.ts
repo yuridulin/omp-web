@@ -1,5 +1,5 @@
 import { NextResponse } from "../../http";
-import { apiErrorResponse } from "@/lib/api-utils";
+import { apiErrorBody } from "@/lib/api-utils";
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -15,6 +15,6 @@ export async function POST() {
     allowFileRoot(dir);
     return NextResponse.json({ cwd: dir });
   } catch (error) {
-    return apiErrorResponse(error);
+    return NextResponse.json(apiErrorBody(error), { status: 500 });
   }
 }
