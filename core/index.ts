@@ -19,3 +19,4 @@ export * from "./ports";
 export type { FrameCursor, WireEvent } from "./protocol";
 export * from "./urls";
 export * from "./extensions";
+export * from "./subagents";
