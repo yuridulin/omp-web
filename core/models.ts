@@ -163,3 +163,48 @@ export function normalizeThinkingLevel(level: string | null | undefined, allowed
   if (allowed.includes("auto")) return "auto";
   return allowed.length > 0 ? allowed[0] : "off";
 }
+
+/** Model-level thinking metadata read off a running session's `get_state`. */
+export interface ThinkingModelMeta {
+  provider: string;
+  modelId: string;
+  name?: string;
+  reasoning?: boolean;
+  thinking?: { efforts?: string[] };
+}
+
+/**
+ * Keep familiar levels ordered while preserving provider-defined additions.
+ * `auto` always leads; unknown efforts follow the known ladder in the order
+ * they were advertised.
+ */
+export function selectableThinkingLevels(available: readonly string[] | null | undefined): string[] {
+  if (!available) return [...DEFAULT_THINKING_LEVELS];
+
+  const remaining = new Set(available.filter((level) => level && level !== "auto"));
+  const ordered = DEFAULT_THINKING_LEVELS.filter((level) => level === "auto" || remaining.delete(level));
+  return [...ordered, ...remaining];
+}
+
+/** "off" is always a valid selector; concrete efforts come from the model. */
+export function thinkingLevelsForMeta(meta: ThinkingModelMeta): string[] {
+  if (!meta.reasoning) return ["off"];
+  return ["off", ...(meta.thinking?.efforts ?? [])];
+}
+
+/**
+ * Levels offered for the current model: the catalog's baked ladder wins; the
+ * live session model backs non-catalog models. Returns null when neither
+ * source knows the model — callers then fall back to the generic ladder.
+ */
+export function resolveAvailableThinkingLevels(
+  catalogLevels: string[] | undefined,
+  model: ModelRef | null,
+  liveModel: ThinkingModelMeta | null,
+): string[] | null {
+  if (catalogLevels && catalogLevels.length > 0) return catalogLevels;
+  if (model && liveModel && liveModel.provider === model.provider && liveModel.modelId === model.modelId) {
+    return thinkingLevelsForMeta(liveModel);
+  }
+  return null;
+}

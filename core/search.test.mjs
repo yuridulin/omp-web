@@ -1,0 +1,107 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createJiti } from "jiti";
+
+const jiti = createJiti(import.meta.url);
+const {
+  compileSearchQuery,
+  scoreSearchFields,
+  searchField,
+  rankSearchResults,
+  transcriptTextFromLines,
+  TITLE_WEIGHT,
+  CONTENT_WEIGHT,
+} = await jiti.import("./search.ts");
+
+const score = (query, title, content = "") =>
+  scoreSearchFields([searchField(title, TITLE_WEIGHT), searchField(content, CONTENT_WEIGHT)], compileSearchQuery(query));
+
+test("every word must match, in any order", () => {
+  assert.notEqual(score("bug login", "Fix login bug"), null);
+  assert.equal(score("login payments", "Fix login bug"), null);
+});
+
+test("typed order and exactness rank higher", () => {
+  assert.ok(score("login bug", "fix login bug") > score("login bug", "bug in login"));
+  assert.ok(score("login", "login page") > score("login", "logins page"));
+});
+
+test("typos still match, short words do not get typo tolerance", () => {
+  assert.notEqual(score("sidebr", "Sidebar search"), null);
+  assert.notEqual(score("kubernetis", "kubernetes cluster"), null);
+  assert.equal(score("cat", "car"), null);
+  assert.equal(score("node", "code mode"), null);
+});
+
+test("a word too far from every word does not match", () => {
+  assert.equal(score("xyzzy", "Fix login bug"), null);
+  assert.equal(score("rolling", "kubernetes cluster setup", "done"), null);
+  assert.equal(score("sidebar", "Totally unrelated words here"), null);
+});
+
+test("combining marks stay inside their word, and NFC/NFD forms match each other", () => {
+  assert.equal(score("हिन्दी", "ह न द"), null);
+  assert.notEqual(score("résumé", "my re\u0301sume\u0301 draft"), null);
+});
+
+test("words may split across title and transcript; title matches outrank transcript matches", () => {
+  assert.notEqual(score("sidebar ranking", "Sidebar work", "we discussed ranking"), null);
+  assert.ok(score("ranking", "Ranking", "") > score("ranking", "Other", "ranking ranking"));
+});
+
+test("quoted phrases must appear verbatim", () => {
+  assert.notEqual(score('"login bug"', "fix login  bug now"), null);
+  assert.equal(score('"bug login"', "fix login bug"), null);
+  assert.equal(score('"logn bug"', "fix login bug"), null);
+  assert.equal(score('"bug lo', "fix login bug"), null);
+  assert.notEqual(score('"login b', "fix login bug"), null);
+  assert.equal(score("“bug login”", "fix login bug"), null);
+  assert.notEqual(score("“login bug”", "fix login bug"), null);
+});
+
+test("empty query compiles to nothing", () => {
+  assert.equal(compileSearchQuery('  "" '), null);
+});
+
+test("fuzzy scoring handles equal-length typos, prefix typos, and long words", () => {
+  assert.equal(score("sidebr", "sidebar"), 45);
+  assert.equal(score("sidebr", "sidebaring"), 45);
+  assert.equal(score("sidebar", "side"), null);
+  assert.equal(score("kubernetis", "kubernetes"), 45);
+  assert.equal(score("kubernetiz", "kubernetes"), 30);
+
+  const longTerm = "a".repeat(70);
+  const oneTypoLongWord = "a".repeat(69) + "b";
+  assert.equal(score(longTerm, oneTypoLongWord), 45);
+  assert.equal(score(longTerm, longTerm), 100);
+});
+
+test("transcript extraction keeps user and assistant text and skips tool output", () => {
+  const lines = [
+    JSON.stringify({ type: "message", message: { role: "user", content: "alpha needle" } }),
+    JSON.stringify({ type: "message", message: { role: "toolResult", content: "ignored_tool_output" } }),
+    JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "beta reply" }] } }),
+    "not json",
+    JSON.stringify({ type: "title", title: "ignored" }),
+  ];
+  const text = transcriptTextFromLines(lines);
+  assert.equal(text.includes("alpha needle"), true);
+  assert.equal(text.includes("beta reply"), true);
+  assert.equal(text.includes("ignored_tool_output"), false);
+  assert.equal(transcriptTextFromLines([]), "");
+});
+
+test("ranking drops documents that do not match and orders by score", () => {
+  const documents = [
+    { name: "Fix login bug" },
+    { name: "Unrelated" },
+    { name: "Login work", content: "we discussed the login bug" },
+  ];
+  const ranked = rankSearchResults(
+    documents,
+    compileSearchQuery("login bug"),
+    (document) => [searchField(document.name, TITLE_WEIGHT), searchField(document.content ?? "", CONTENT_WEIGHT)],
+  );
+  assert.deepEqual(ranked.map((entry) => entry.document.name), ["Fix login bug", "Login work"]);
+  assert.ok(ranked[0].score > ranked[1].score);
+});
