@@ -22,6 +22,7 @@ import {
   getAudioMime,
   getDocumentMime,
   getFileExt,
+  getFileLanguage,
   getImageMime,
   getStreamSecurityHeaders,
 } from "@/lib/file-types";
@@ -165,31 +166,6 @@ export const contract = routeContract({
     },
   },
 });
-
-const EXT_TO_LANGUAGE: Record<string, string> = {
-  ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
-  mjs: "javascript", cjs: "javascript", py: "python", rb: "ruby",
-  go: "go", rs: "rust", java: "java", kt: "kotlin", swift: "swift",
-  c: "c", cpp: "cpp", h: "c", hpp: "cpp", cs: "csharp",
-  html: "html", htm: "html", css: "css", scss: "css", less: "css",
-  json: "json", jsonl: "json", yaml: "yaml", yml: "yaml",
-  toml: "toml", xml: "xml", md: "markdown", mdx: "markdown",
-  sh: "bash", bash: "bash", zsh: "bash", fish: "bash",
-  sql: "sql", graphql: "graphql", gql: "graphql",
-  dockerfile: "dockerfile", tf: "hcl", hcl: "hcl",
-  env: "bash", gitignore: "bash", txt: "text",
-  pdf: "pdf", docx: "word",
-};
-
-function getLanguage(filePath: string): string {
-  const base = path.basename(filePath).toLowerCase();
-  // Special full-name matches
-  if (base === "dockerfile" || base.startsWith("dockerfile.")) return "dockerfile";
-  if (base === ".env" || base.startsWith(".env.")) return "bash";
-  if (base === "makefile" || base === "gnumakefile") return "makefile";
-  const ext = base.split(".").pop() ?? "";
-  return EXT_TO_LANGUAGE[ext] ?? "text";
-}
 
 function parseFileRequestType(value: string): FileRequestType | null {
   return FILE_REQUEST_TYPE_SET.has(value) ? (value as FileRequestType) : null;
@@ -574,7 +550,7 @@ export async function GET(
         return json({ error: "File too large for preview (>256KB)", code: "file_too_large_preview" }, { status: 413 });
       }
       const content = fs.readFileSync(filePath, "utf-8");
-      const language = getLanguage(filePath);
+      const language = getFileLanguage(filePath);
       return json({ content, language, size: stat.size });
     }
 
@@ -595,7 +571,7 @@ export async function GET(
       const documentMime = getDocumentMime(filePath);
       return json({
         size: stat.size,
-        language: getLanguage(filePath),
+        language: getFileLanguage(filePath),
         mime: imageMime || audioMime || documentMime || "text/plain",
         previewKind: documentPreviewKind(filePath),
       });

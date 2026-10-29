@@ -15,7 +15,7 @@
     "bun": ">=1.4.4"
   },
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --path-ignore-patterns='web/**'",
     "typecheck": "tsc --noEmit",
     "start": "bun server/index.ts",
     "dev": "bun --watch server/index.ts",

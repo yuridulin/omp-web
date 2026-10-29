@@ -8481,6 +8481,7 @@ export interface paths {
                                 repositoryRoot: string | null;
                                 files: ({
                                     filePath: string;
+                                    originalPath?: string;
                                     status: string;
                                     code: string;
                                     indexStatus: string;
@@ -8652,6 +8653,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace/git/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return before/after text for one file between two git states */
+        get: {
+            parameters: {
+                query: {
+                    cwd: string;
+                    from?: string;
+                    oldPath?: string;
+                    path: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            supported: boolean;
+                            before?: string;
+                            after?: string;
+                            language?: string;
+                            binary?: boolean;
+                            truncated?: boolean;
+                            oldPath?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Error */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace/git/stage": {
         parameters: {
             query?: never;
@@ -8690,6 +8794,7 @@ export interface paths {
                             repositoryRoot: string | null;
                             files: ({
                                 filePath: string;
+                                originalPath?: string;
                                 status: string;
                                 code: string;
                                 indexStatus: string;
@@ -8778,6 +8883,7 @@ export interface paths {
                             repositoryRoot: string | null;
                             files: ({
                                 filePath: string;
+                                originalPath?: string;
                                 status: string;
                                 code: string;
                                 indexStatus: string;
@@ -8904,6 +9010,7 @@ export interface paths {
                             repositoryRoot: string | null;
                             files: ({
                                 filePath: string;
+                                originalPath?: string;
                                 status: string;
                                 code: string;
                                 indexStatus: string;

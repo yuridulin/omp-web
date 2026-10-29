@@ -60,8 +60,14 @@ day-to-day repository rules.
   not embeddable. DSH is a visual reference, not a source of components.
 - Styles: design tokens in `src/styles/tokens.css` + CSS Modules. Keyboard-first,
   dense dark layout, no modal wizards.
+- Layout state is client-only: `omp.layout.v1` for global widths/flags and
+  `omp.workbench.v1.<sessionId>` for tabs, expanded directories, view and
+  scroll. Server snapshots stay the authority for session content.
+- Monaco and xterm are lazy-loaded; the chat shell must not pay their bundle
+  cost on first paint.
 - Tests: Vitest + Testing Library; Playwright for flows when a flow exists.
   `bun run web:typecheck`, `bun run web:test`, `bun run web:build` must pass.
 - Tests: `core/*.test.mjs` and `lib/**/*.test.mjs` using `bun:test` with
-  direct `.ts` imports. Run `bun test` and `bun run typecheck` after changes.
+  direct `.ts` imports. Run `bun run test` and `bun run typecheck` after changes;
+  `web/` has its own Vitest suite (`bun run web:test`).
 - Commit messages follow `Add ...`, `fix(scope): ...`, `test(scope): ...`.

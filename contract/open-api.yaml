@@ -9193,6 +9193,8 @@ paths:
                           properties:
                             filePath:
                               type: string
+                            originalPath:
+                              type: string
                             status:
                               type: string
                             code:
@@ -9352,6 +9354,113 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/workspace/git/file:
+    get:
+      summary: Return before/after text for one file between two git states
+      parameters:
+        - name: cwd
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^(HEAD|INDEX|WORKTREE|EMPTY|[0-9a-fA-F]{4,64})$
+        - name: oldPath
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^(HEAD|INDEX|WORKTREE|EMPTY|[0-9a-fA-F]{4,64})$
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  supported:
+                    type: boolean
+                  before:
+                    type: string
+                  after:
+                    type: string
+                  language:
+                    type: string
+                  binary:
+                    type: boolean
+                  truncated:
+                    type: boolean
+                  oldPath:
+                    type: string
+                required:
+                  - supported
+                additionalProperties: {}
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                required:
+                  - error
+                  - code
+                additionalProperties: {}
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                required:
+                  - error
+                  - code
+                additionalProperties: {}
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                required:
+                  - error
+                  - code
+                additionalProperties: {}
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/workspace/git/stage:
     post:
       summary: Stage repository changes (explicit paths or all)
@@ -9392,6 +9501,8 @@ paths:
                       type: object
                       properties:
                         filePath:
+                          type: string
+                        originalPath:
                           type: string
                         status:
                           type: string
@@ -9480,6 +9591,8 @@ paths:
                       type: object
                       properties:
                         filePath:
+                          type: string
+                        originalPath:
                           type: string
                         status:
                           type: string
@@ -9609,6 +9722,8 @@ paths:
                       type: object
                       properties:
                         filePath:
+                          type: string
+                        originalPath:
                           type: string
                         status:
                           type: string

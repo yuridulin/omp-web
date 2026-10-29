@@ -11,6 +11,7 @@ export type GitCollapseReason = "generated" | "vendored" | "documentation" | "no
 
 export interface GitFileStatus {
   filePath: string;
+  originalPath?: string;
   status: GitFileStatusKind;
   code: "M" | "A" | "D" | "R" | "U" | "C";
   indexStatus: string;
@@ -28,4 +29,14 @@ export interface GitFileDiffResponse {
   supported: boolean;
   status?: GitFileStatusKind;
   patch?: string;
+}
+
+export interface GitFileContentsResponse {
+  supported: boolean;
+  before?: string;
+  after?: string;
+  language?: string;
+  binary?: boolean;
+  truncated?: boolean;
+  oldPath?: string;
 }

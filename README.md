@@ -49,7 +49,7 @@ reverse proxy if it is exposed. The generated contract is
 ## Development
 
 ```
-bun test            # bun:test, no build step
+bun run test        # bun:test for core/lib/server, no build step
 bun run typecheck   # tsc --noEmit
 bun run contract    # regenerate contract/open-api.yaml from route contracts
 bun run contract:check

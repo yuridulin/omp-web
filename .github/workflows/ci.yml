@@ -21,4 +21,4 @@ jobs:
       - run: bun run web:typecheck
       - run: bun run web:test
       - run: bun run web:build
-      - run: bun test
+      - run: bun run test

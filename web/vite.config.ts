@@ -7,6 +7,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Monaco's package exports only expose JS subpaths; the editor CSS is
+      // still shipped in the package and must be pulled in explicitly.
+      "monaco-editor/min/vs/editor/editor.main.css": fileURLToPath(
+        new URL("./node_modules/monaco-editor/min/vs/editor/editor.main.css", import.meta.url),
+      ),
     },
   },
   server: {

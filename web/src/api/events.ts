@@ -83,7 +83,14 @@ export class EventStreamClient {
     await this.start();
     const id = `s${this.#nextId++}`;
     this.#subscriptions.set(id, { channel, handler });
-    await this.#post({ subscribe: { id, channel } });
+    try {
+      await this.#post({ subscribe: { id, channel } });
+    } catch (error) {
+      // A 409 means the session has no live wrapper; keep retrying would just
+      // repeat the failure on every reconnect. Network failures stay queued.
+      if (String(error).includes("409")) this.#subscriptions.delete(id);
+      throw error;
+    }
     return () => {
       this.#subscriptions.delete(id);
       if (this.#connectionId) void this.#post({ unsubscribe: id }).catch(() => {});
@@ -102,9 +109,8 @@ export class EventStreamClient {
       try {
         await this.#connect();
         delay = RECONNECT_MIN_MS;
-      } catch (error) {
+      } catch {
         if (this.#closed) return;
-        if (this.#connectionId === null) this.#ready.reject(error);
         await new Promise((resolve) => setTimeout(resolve, delay));
         delay = Math.min(RECONNECT_MAX_MS, delay * 2);
       }
@@ -155,8 +161,8 @@ export class EventStreamClient {
       try {
         await this.#post({ subscribe: { id, channel: subscription.channel } });
       } catch {
-        // The connection dropped again; the next hello retries.
-        return;
+        // One invalid channel must not block the others; the next hello retries.
+        continue;
       }
     }
   }

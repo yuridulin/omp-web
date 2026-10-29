@@ -1,144 +1,147 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { EventStreamClient } from "@/api/events";
-import { applySnapshotFrame, isSnapshotFrame } from "@/state/session-store";
-import { useSessionSnapshot } from "@/state/use-session-snapshot";
+import { basename, comparablePath } from "@/api/paths";
+import { useProjects } from "@/features/projects/use-projects";
 import { useSessions } from "@/features/sessions/use-sessions";
-import { messageText } from "@/features/sessions/message-text";
+import { SessionRail } from "@/features/rail/SessionRail";
+import { ChatPane } from "@/features/chat/ChatPane";
+import { Workbench } from "@/features/workbench/Workbench";
+import { useSessionContext } from "@/features/workbench/use-workbench-data";
+import { ensureWorkbenchRoot, updateLayout } from "@/layout/layout-store";
+import { ResizeHandle } from "@/layout/ResizeHandle";
+import { useLayout } from "@/layout/use-layout";
+import { useRunningSessions, useSessionStream, useWorkspaceEvents } from "@/state/event-stream";
+import { useSessionSnapshot } from "@/state/use-session-snapshot";
 import styles from "./app.module.css";
+
+const EMPTY_RUNNING: string[] = [];
 
 export function App() {
   const queryClient = useQueryClient();
+  const layout = useLayout();
   const sessions = useSessions();
+  const projects = useProjects();
   const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(window.location.search).get("session"));
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+
   const snapshot = useSessionSnapshot(selected);
-  const [client, setClient] = useState<EventStreamClient | null>(null);
+  const session = sessions.data?.sessions.find((item) => item.id === selected) ?? null;
+  const root = session?.cwd ?? null;
+  const projectRoot = session?.projectRoot ?? root;
+  const projectLabel = useMemo(() => {
+    if (!projectRoot) return "";
+    const match = projects.data?.find((project) => comparablePath(project.path) === comparablePath(projectRoot));
+    return match?.alias?.trim() || basename(projectRoot);
+  }, [projectRoot, projects.data]);
+
+  const fallbackRunning = sessions.data?.runningSessionIds ?? EMPTY_RUNNING;
+  const running = useRunningSessions(fallbackRunning);
+  const { error: streamError } = useSessionStream(selected);
+  const context = useSessionContext(selected, !snapshot);
+  useWorkspaceEvents(root);
 
   useEffect(() => {
-    const instance = new EventStreamClient();
-    setClient(instance);
-    return () => {
-      instance.close();
-      setClient(null);
-    };
-  }, []);
+    if (selected && root) ensureWorkbenchRoot(selected, root);
+  }, [root, selected]);
 
-  useEffect(() => {
-    if (!client || !selected) return;
-    let detach: (() => void) | undefined;
-    let cancelled = false;
-    void client
-      .subscribe({ kind: "session", sessionId: selected }, (frame) => {
-        if (isSnapshotFrame(frame)) applySnapshotFrame(selected, frame);
-      })
-      .then((unsubscribe) => {
-        if (cancelled) unsubscribe();
-        else detach = unsubscribe;
-      })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
-    return () => {
-      cancelled = true;
-      detach?.();
-    };
-  }, [client, selected]);
-
-  const sendDraft = async () => {
-    if (!selected || !draft.trim()) return;
-    setError(null);
-    const { error: requestError, response } = await api.POST("/api/agent/sessions/{id}/intent", {
-      params: { path: { id: selected } },
-      body: { kind: "draft-edit", patch: { text: draft } },
-    });
-    if (requestError) setError(requestError.error ?? `HTTP ${response.status}`);
+  const selectSession = (sessionId: string) => {
+    setSelected(sessionId);
+    setSendError(null);
+    window.history.replaceState(null, "", `?session=${encodeURIComponent(sessionId)}`);
   };
 
-  const session = snapshot?.session;
-  const messages = session?.messages ?? [];
-  const running = new Set(sessions.data?.runningSessionIds ?? []);
+  const sendPrompt = async (text: string) => {
+    if (!selected) return;
+    setSendError(null);
+    const { error } = await api.POST("/api/agent/sessions/{id}/intent", {
+      params: { path: { id: selected } },
+      body: { kind: "prompt", text },
+    });
+    if (error) setSendError(error.error ?? "Failed to send the prompt");
+  };
+
+  const toggleRail = () => updateLayout({ railCollapsed: !layout.railCollapsed });
+  const toggleWorkbench = () => updateLayout({ workbenchCollapsed: !layout.workbenchCollapsed });
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target as HTMLElement | null;
+      const editing = target?.closest("input, textarea, [contenteditable=true]");
+      if (editing) return;
+      if (event.key.toLowerCase() === "b" && !event.shiftKey) {
+        event.preventDefault();
+        updateLayout({ railCollapsed: !layout.railCollapsed });
+      } else if (event.shiftKey && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        updateLayout({ workbenchCollapsed: !layout.workbenchCollapsed });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [layout.railCollapsed, layout.workbenchCollapsed]);
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    void queryClient.invalidateQueries({ queryKey: ["projects"] });
+  };
 
   return (
     <div className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <header className={styles.sidebarHeader}>
-          <span className={styles.brand}>omp</span>
-          <button
-            className={styles.refresh}
-            onClick={() => void queryClient.invalidateQueries({ queryKey: ["sessions"] })}
-            title="Refresh sessions"
-          >
-            ↻
-          </button>
-        </header>
-        {sessions.isError ? <p className={styles.error}>{sessions.error.message}</p> : null}
-        <ul className={styles.sessionList}>
-          {(sessions.data?.sessions ?? []).map((item) => (
-            <li key={item.id}>
-              <button
-                className={item.id === selected ? styles.sessionActive : styles.session}
-                onClick={() => {
-                  setSelected(item.id);
-                  setDraft("");
-                  setError(null);
-                  window.history.replaceState(null, "", `?session=${encodeURIComponent(item.id)}`);
-                }}
-                title={item.cwd}
-              >
-                <span className={running.has(item.id) ? styles.dotRunning : styles.dot} />
-                <span className={styles.sessionName}>{item.name ?? item.id.slice(0, 8)}</span>
-                <span className={styles.sessionMeta}>{item.messageCount}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
+      {!layout.railCollapsed ? (
+        <>
+          <div className={styles.railPane} style={{ width: layout.railWidth }}>
+            <SessionRail
+              sessions={sessions.data?.sessions ?? []}
+              projects={projects.data ?? []}
+              selected={selected}
+              running={running}
+              loading={sessions.isLoading}
+              error={sessions.isError ? sessions.error.message : null}
+              onSelect={selectSession}
+              onRefresh={refresh}
+              onCollapse={toggleRail}
+            />
+          </div>
+          <ResizeHandle
+            label="Resize session rail"
+            onDelta={(delta) => updateLayout({ railWidth: layout.railWidth + delta })}
+            onReset={() => updateLayout({ railWidth: 248 })}
+          />
+        </>
+      ) : null}
 
-      <main className={styles.main}>
-        <header className={styles.topbar}>
-          <span>{selected ?? "no session"}</span>
-          <span className={styles.connection}>{session?.connection ?? "idle"}</span>
-        </header>
+      <ChatPane
+        session={session}
+        selected={selected}
+        snapshot={snapshot}
+        context={context.data}
+        streamError={streamError ?? sendError}
+        railCollapsed={layout.railCollapsed}
+        workbenchCollapsed={layout.workbenchCollapsed}
+        onToggleRail={toggleRail}
+        onToggleWorkbench={toggleWorkbench}
+        onSend={sendPrompt}
+      />
 
-        {!selected ? (
-          <section className={styles.empty}>
-            <p>Select a session</p>
-            <p className={styles.muted}>The server owns state; this view renders its snapshots.</p>
-          </section>
-        ) : (
-          <>
-            <section className={styles.transcript}>
-              {messages.slice(-50).map((message, index) => (
-                <article key={`${message.timestamp ?? index}-${message.role}`} className={styles.message}>
-                  <span className={styles.role}>{message.role}</span>
-                  <pre className={styles.text}>{messageText(message)}</pre>
-                </article>
-              ))}
-              {session?.stream.active && session.stream.message ? (
-                <article className={styles.message}>
-                  <span className={styles.role}>assistant</span>
-                  <pre className={styles.text}>{messageText(session.stream.message)}</pre>
-                </article>
-              ) : null}
-            </section>
-
-            <footer className={styles.composer}>
-              <textarea
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="draft intent (draft-edit)"
-                rows={2}
-              />
-              <button onClick={() => void sendDraft()} disabled={!draft.trim()}>
-                Save draft
-              </button>
-              {error ? <span className={styles.error}>{error}</span> : null}
-              <span className={styles.muted}>server draft: {snapshot?.draft.value ?? "—"}</span>
-            </footer>
-          </>
-        )}
-      </main>
+      {!layout.workbenchCollapsed && selected ? (
+        <>
+          <ResizeHandle
+            label="Resize workbench"
+            onDelta={(delta) => updateLayout({ workbenchWidth: layout.workbenchWidth - delta })}
+            onReset={() => updateLayout({ workbenchWidth: 720 })}
+          />
+          <div className={styles.workbenchPane} style={{ width: layout.workbenchWidth }}>
+            <Workbench
+              sessionId={selected}
+              root={root}
+              projectLabel={projectLabel}
+              onClose={toggleWorkbench}
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
