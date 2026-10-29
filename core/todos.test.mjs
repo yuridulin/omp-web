@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   parseTodoPhases,
   todoPhasesFromEntries,
   currentTodoPhase,
   todoProgress,
-} = await jiti.import("./todos");
+} = await import("./todos.ts");
 
 const phase = (name, tasks) => ({ name, tasks });
 const task = (content, status, blocker) => (blocker === undefined ? { content, status } : { content, status, blocker });

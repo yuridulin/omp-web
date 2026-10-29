@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const { crossOriginRejection } = await createJiti(import.meta.url, { tsconfigPaths: true }).import("./cross-origin.ts");
+const { crossOriginRejection } = await import("./cross-origin.ts");
 
 const REJECTION = {
   status: 403,

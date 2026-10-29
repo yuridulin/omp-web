@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   EMPTY_SUBAGENTS,
   activeSubagentCount,
@@ -13,9 +11,9 @@ const {
   parseSubagentProgress,
   reduceSubagents,
   resetSubagents,
-} = await jiti.import("./subagents");
+} = await import("./subagents.ts");
 // Test-only anti-drift check: the presentation hook still runs this fold.
-const { mergeSubagentRoster } = await jiti.import("../lib/subagent-types");
+const { mergeSubagentRoster } = await import("../lib/subagent-types.ts");
 
 function deepFreeze(value) {
   if (value && typeof value === "object") {

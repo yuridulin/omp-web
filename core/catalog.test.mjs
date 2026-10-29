@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   comparablePath,
   groupSessions,
@@ -11,7 +9,7 @@ const {
   orderProjects,
   searchSessions,
   sortProjects,
-} = await jiti.import("./catalog");
+} = await import("./catalog.ts");
 
 function deepFreeze(value) {
   if (value && typeof value === "object") {

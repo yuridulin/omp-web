@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   isTextAttachmentFile,
   composeMessageWithTextAttachments,
@@ -11,7 +9,7 @@ const {
   formatAttachmentBytes,
   MAX_ATTACHED_TEXT_BYTES,
   MAX_TOTAL_ATTACHED_TEXT_BYTES,
-} = await jiti.import("./attachments.ts");
+} = await import("./attachments.ts");
 
 function textFile(name, type = "") {
   return { name, type };

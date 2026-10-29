@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { resolveForkTargets } = await jiti.import("./fork.ts");
+const { resolveForkTargets } = await import("./fork.ts");
 
 const edit = (entryId) => ({ entryId, editPrompt: true });
 const keep = (entryId) => ({ entryId, editPrompt: false });

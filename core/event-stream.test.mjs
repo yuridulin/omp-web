@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   EVENT_STREAM_PATH,
   MUX_CONTROL_EVENT,
   UNKNOWN_CONNECTION_CODE,
   parseEventStreamChannel,
   parseEventStreamRequest,
-} = await jiti.import("./event-stream.ts");
+} = await import("./event-stream.ts");
 
 test("the wire constants are the documented ones", () => {
   assert.equal(EVENT_STREAM_PATH, "/api/events");

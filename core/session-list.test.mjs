@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   SESSION_LIST_PREFIX_BYTES,
   scanSessionInfo,
@@ -12,7 +10,7 @@ const {
   extractFirstDisplayMessageFromPrefix,
   extractStringProperty,
   firstUserMessageFromLines,
-} = await jiti.import("./session-list.ts");
+} = await import("./session-list.ts");
 
 const modified = new Date("2026-01-02T00:00:00.000Z");
 const header = { type: "session", version: 3, id: "s1", cwd: "/repo", timestamp: "2026-01-01T00:00:00.000Z", title: "Header title" };

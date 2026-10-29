@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { applyBtwEvent, latestBtwAnswer, latestBtwTurn, mergeBtwHistory, upsertBtwRecord } = await jiti.import("./btw.ts");
+const { applyBtwEvent, latestBtwAnswer, latestBtwTurn, mergeBtwHistory, upsertBtwRecord } = await import("./btw.ts");
 
 const record = (overrides = {}) => ({
   id: "r1", leafId: null, question: "what is 2+2", answer: "", status: "running", createdAt: 1, updatedAt: 1, ...overrides,

@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   SESSION_TITLE_SLOT_BYTES,
   SUPERSEDED_COMPACTION_SUMMARY,
@@ -15,7 +13,7 @@ const {
   buildSessionTree,
   getLeafEntryId,
   normalizeToolCalls,
-} = await jiti.import("./session.ts");
+} = await import("./session.ts");
 
 function userEntry(id, parentId, content, timestamp = "2026-01-01T00:00:00.000Z") {
   return { type: "message", id, parentId, timestamp, message: { role: "user", content } };

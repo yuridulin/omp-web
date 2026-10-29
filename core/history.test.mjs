@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   reconcilePage,
   planLiveMerge,
@@ -13,7 +11,7 @@ const {
   parseHistoryCursor,
   selectHistoryRange,
   paginateContext,
-} = await jiti.import("./history");
+} = await import("./history.ts");
 
 const user = (text) => ({ role: "user", content: text });
 const assistant = (text) => ({ role: "assistant", content: [{ type: "text", text }] });

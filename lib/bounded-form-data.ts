@@ -64,7 +64,9 @@ export async function parseFormDataWithinLimit(request: Request, maxBytes: numbe
   }
 
   const reader = request.body?.getReader();
-  if (!reader) return request.formData();
+  // Bun types fall back to undici's FormData on the DOM-less `Request`; at
+  // runtime it is the global FormData.
+  if (!reader) return request.formData() as Promise<FormData>;
 
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let size = 0;
@@ -87,5 +89,5 @@ export async function parseFormDataWithinLimit(request: Request, maxBytes: numbe
 
   const contentType = request.headers.get("content-type");
   const headers = contentType ? { "content-type": contentType } : undefined;
-  return new Response(new Blob(chunks), { headers }).formData();
+  return new Response(new Blob(chunks), { headers }).formData() as Promise<FormData>;
 }

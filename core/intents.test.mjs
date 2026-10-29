@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { toFrame, isLocalIntent } = await jiti.import("./commands");
-const { applyRecovery, isDraftEmpty, parseDraft, serializeDraft, draftKeysToEvict, mergeRecoveredText, EMPTY_DRAFT } = await jiti.import("./drafts");
-const { branchReducer, initialBranching, isHistoryBusy, canBeginEdit, canBeginFork } = await jiti.import("./branching");
+const { toFrame, isLocalIntent } = await import("./commands.ts");
+const { applyRecovery, isDraftEmpty, parseDraft, serializeDraft, draftKeysToEvict, mergeRecoveredText, EMPTY_DRAFT } = await import("./drafts.ts");
+const { branchReducer, initialBranching, isHistoryBusy, canBeginEdit, canBeginFork } = await import("./branching.ts");
 
 test("every intent maps to its runtime frame", () => {
   const cases = [

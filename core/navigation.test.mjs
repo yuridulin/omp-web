@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   createNavigationHistory,
   pushNavigationEntry,
@@ -16,7 +14,7 @@ const {
   navigateShortcutHint,
   isMacPlatform,
   NAVIGATION_HISTORY_MAX_ENTRIES,
-} = await jiti.import("./navigation.ts");
+} = await import("./navigation.ts");
 
 const session = (id, cwd = "/repo") => ({ sessionId: id, cwd });
 const newChat = (cwd) => ({ sessionId: null, cwd });

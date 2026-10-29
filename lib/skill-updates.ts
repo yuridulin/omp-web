@@ -243,7 +243,9 @@ export async function checkSkillUpdates(
   installs: SkillInstallInfo[],
   options: CheckOptions = {},
 ): Promise<SkillUpdateResult[]> {
-  const fetcher = options.fetcher ?? fetch;
+  // @types/node also declares `fetch`, returning undici's Response; Bun's
+  // declaration is the accurate one for this runtime.
+  const fetcher: Fetcher = options.fetcher ?? (fetch as Fetcher);
   const requests = new Map<string, Promise<Response>>();
   const cachedFetcher: Fetcher = async (input, init) => {
     let request = requests.get(input);
@@ -251,7 +253,7 @@ export async function checkSkillUpdates(
       request = fetcher(input, init);
       requests.set(input, request);
     }
-    return (await request).clone();
+    return (await request).clone() as Response;
   };
 
   return Promise.all(

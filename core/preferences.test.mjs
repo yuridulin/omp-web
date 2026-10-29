@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   getSubmitDuringRunBehavior,
   setSubmitDuringRunBehavior,
@@ -11,8 +9,8 @@ const {
   isWordCompletionEnabled,
   getPreferredToolPreset,
   setPreferredToolPreset,
-} = await jiti.import("./preferences.ts");
-const { getToolNamesForPreset } = await jiti.import("./tool-presets.ts");
+} = await import("./preferences.ts");
+const { getToolNamesForPreset } = await import("./tool-presets.ts");
 
 function createStorage(values = {}) {
   const entries = new Map(Object.entries(values));

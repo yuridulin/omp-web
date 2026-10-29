@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { SessionMachine } = await jiti.import("./machine");
+const { SessionMachine } = await import("./machine.ts");
 
 /** Transport double: records frames, hands out queued replies, exposes handlers. */
 function fakeTransport() {

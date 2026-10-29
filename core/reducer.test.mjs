@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { reduce } = await jiti.import("./reducer");
-const { initialState, visibleMessages } = await jiti.import("./state");
+const { reduce } = await import("./reducer.ts");
+const { initialState, visibleMessages } = await import("./state.ts");
 
 const frame = (type, extra = {}, sequence = undefined, streamId = undefined) => ({
   type,

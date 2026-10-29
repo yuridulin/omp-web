@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { resolveAvailableThinkingLevels, selectableThinkingLevels, thinkingLevelsForMeta } = await jiti.import("./models.ts");
+const { resolveAvailableThinkingLevels, selectableThinkingLevels, thinkingLevelsForMeta } = await import("./models.ts");
 
 const LUNA = { provider: "openai", modelId: "gpt-5.6-luna" };
 const LIVE_LUNA = { provider: "openai", modelId: "gpt-5.6-luna", reasoning: true, thinking: { efforts: ["low", "medium", "high", "xhigh", "max"] } };

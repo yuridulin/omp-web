@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { buildCatalog, filterCommands, parseCommandLine, resolveInput } = await jiti.import("./slash");
-const { WEB_COMMANDS } = await jiti.import("./web-commands");
+const { buildCatalog, filterCommands, parseCommandLine, resolveInput } = await import("./slash.ts");
+const { WEB_COMMANDS } = await import("./web-commands.ts");
 
 function runtime(name, options = {}) {
   return { name, source: "runtime", requiresArgs: false, ...options };

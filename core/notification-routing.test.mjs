@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { DEFAULT_NOTIFICATION_PREFS } = await jiti.import("./notifications.ts");
+const { DEFAULT_NOTIFICATION_PREFS } = await import("./notifications.ts");
 const {
   PRESENCE_TTL_MS,
   routeNotification,
   presenceCoversSession,
   prunePresence,
   acceptPresence,
-} = await jiti.import("./notification-routing.ts");
+} = await import("./notification-routing.ts");
 
 const event = { type: "completed", sessionId: "s1", sessionName: "Session" };
 const prefs = (patch = {}) => ({ ...DEFAULT_NOTIFICATION_PREFS, enabled: true, ...patch });

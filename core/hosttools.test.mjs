@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   HOST_TOOL_DEFINITIONS,
   HOST_URI_SCHEMES,
@@ -11,7 +9,7 @@ const {
   hostToolResultFrame,
   parseHostUriRequest,
   hostUriResultFrame,
-} = await jiti.import("./hosttools");
+} = await import("./hosttools.ts");
 
 /** Records calls; returns a fixed text so assertions can spot preference. */
 function handlers(overrides = {}) {

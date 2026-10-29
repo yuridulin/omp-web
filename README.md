@@ -1,7 +1,7 @@
 # omp-web core
 
 Framework-free TypeScript logic for an [omp](https://github.com/oh-my-pi/oh-my-pi)
-client, the Node host that drives `omp --mode rpc-ui` and its session files,
+client, the Bun host that drives `omp --mode rpc-ui` and its session files,
 and a minimal HTTP server that exposes the host over the same `/api/*` routes
 the previous web app used.
 
@@ -15,9 +15,9 @@ core/   pure TypeScript: no React, DOM, fetch, storage, timers or Node imports
         session state machine, transcripts, drafts, search, notifications,
         side questions, models, todos, subagents, host tools, session files
         and lists, history paging, RPC framing, routing
-lib/    Node host layer: omp process + NDJSON transport, session file IO,
+lib/    Bun host layer: omp process + NDJSON transport, session file IO,
         model/MCP/settings config, usage, media, notifications, skills, STT
-server/ plain node:http server; routes are the former Next.js handlers with
+server/ Bun.serve server; routes are the former Next.js handlers with
         next/server replaced by server/http.ts (NextResponse.json/NextRequest)
 ```
 
@@ -27,8 +27,8 @@ is the single public barrel.
 ## Run
 
 ```
-npm start                 # http://127.0.0.1:30178
-OMP_WEB_HOST=0.0.0.0 OMP_WEB_PORT=8080 npm start
+bun start                 # http://127.0.0.1:30178
+OMP_WEB_HOST=0.0.0.0 OMP_WEB_PORT=8080 bun start
 ```
 
 Endpoints include `/api/sessions*`, `/api/agent/*`, `/api/events` (multiplexed
@@ -40,8 +40,8 @@ gate; put it behind a reverse proxy if it is exposed.
 ## Development
 
 ```
-npm test          # node:test + jiti, no build step
-npm run typecheck # tsc --noEmit
+bun test            # bun:test, no build step
+bun run typecheck   # tsc --noEmit
 ```
 
-Requires Node.js 24+ (tests and the server use `--experimental-strip-types`).
+Requires Bun 1.4.4+.

@@ -1,9 +1,7 @@
-import test from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { createJiti } from "jiti";
 
-const jiti = createJiti(import.meta.url);
-const { createMessageUpdateCoalescer } = await jiti.import("./coalescer.ts");
+const { createMessageUpdateCoalescer } = await import("./coalescer.ts");
 
 /** Manual scheduler: collects flush callbacks so tests control flush timing. */
 function manualScheduler() {

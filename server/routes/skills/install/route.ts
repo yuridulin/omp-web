@@ -1,5 +1,5 @@
 import { NextResponse } from "../../../http";
-import { runNpx } from "@/lib/npx";
+import { runBunx } from "@/lib/bunx";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     if (!pkg?.trim()) return NextResponse.json({ error: "package required", code: "package_required" }, { status: 400 });
     // npm package-name grammar: scope-optional, URL-safe segments. Rejecting
     // leading dashes/`-` prefixes stops a value like `--force` from being
-    // interpreted as npx/CLI options instead of a package name.
+    // interpreted as `bun x`/CLI options instead of a package name.
     const name = pkg.trim();
     if (name.startsWith("-") || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name)) {
       return NextResponse.json({ error: "Invalid package name", code: "package_invalid" }, { status: 400 });
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const args = ["skills", "add", name, "-y", "--agent", "universal"];
     if (isGlobal) args.push("-g");
 
-    const { stdout, stderr } = await runNpx(args, {
+    const { stdout, stderr } = await runBunx(args, {
       timeout: 60000,
       cwd: !isGlobal && cwd ? cwd : undefined,
       env: createChildProcessEnvironment({ FORCE_COLOR: "0" }),

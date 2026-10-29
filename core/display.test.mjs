@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   planTranscriptRows,
   looksLikeRunningTurn,
@@ -14,7 +12,7 @@ const {
   captureScrollDistance,
   restoreScrollTop,
   VISIBLE_PAGE_SIZE,
-} = await jiti.import("./display.ts");
+} = await import("./display.ts");
 
 function user(id, content = `u-${id}`) {
   return { role: "user", content };

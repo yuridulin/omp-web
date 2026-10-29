@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   encodeRpcCommand,
   MAX_INBOUND_COMMAND_BYTES,
   MAX_RPC_FRAME_BYTES,
   RpcFrameDecoder,
-} = await jiti.import("./rpc-frame.ts");
+} = await import("./rpc-frame.ts");
 
 /** Outbound v2 chunk records exactly as omp emits them. */
 function chunkRecords(frame, chunkId, payloadBytes = 256 * 1024) {

@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { parseCompactionSummary } = await jiti.import("./compaction.ts");
+const { parseCompactionSummary } = await import("./compaction.ts");
 
 test("separates file metadata tags from the visible compaction summary", () => {
   const parsed = parseCompactionSummary(`## Goal

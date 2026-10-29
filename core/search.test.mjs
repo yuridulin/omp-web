@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   compileSearchQuery,
   scoreSearchFields,
@@ -11,7 +9,7 @@ const {
   transcriptTextFromLines,
   TITLE_WEIGHT,
   CONTENT_WEIGHT,
-} = await jiti.import("./search.ts");
+} = await import("./search.ts");
 
 const score = (query, title, content = "") =>
   scoreSearchFields([searchField(title, TITLE_WEIGHT), searchField(content, CONTENT_WEIGHT)], compileSearchQuery(query));

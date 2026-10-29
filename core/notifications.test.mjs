@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   createNotificationDetector,
   parseNotificationPrefs,
@@ -14,7 +12,7 @@ const {
   removeNotificationHistoryEntry,
   unreadNotificationCount,
   NOTIFICATION_HISTORY_LIMIT,
-} = await jiti.import("./notifications.ts");
+} = await import("./notifications.ts");
 
 const session = { sessionId: "s1", sessionName: "Refactor auth" };
 

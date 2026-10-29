@@ -1,56 +1,14 @@
 import assert from "node:assert/strict";
-import { Writable } from "node:stream";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const { matchRoute, selectRoute, dispatch } = await createJiti(import.meta.url, {
-  tsconfigPaths: true,
-}).import("./index.ts");
+const { matchRoute, selectRoute, dispatch } = await import("./index.ts");
 
 function createRequest(url, method = "GET") {
-  return {
-    url,
-    method,
-    headers: { host: "127.0.0.1:30178" },
-    on() {
-      return this;
-    },
-  };
+  return new Request(`http://127.0.0.1:30178${url}`, { method });
 }
 
-function isHeaderBag(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function createResponse() {
-  const chunks = [];
-  const headers = new Map();
-  const response = new Writable({
-    write(chunk, encoding, callback) {
-      chunks.push(typeof chunk === "string" ? Buffer.from(chunk, encoding) : Buffer.from(chunk));
-      callback();
-    },
-  });
-  response.statusCode = 0;
-  response.headersSent = false;
-  response.setHeader = (name, value) => {
-    headers.set(String(name).toLowerCase(), value);
-    return response;
-  };
-  response.writeHead = (statusCode, second, third) => {
-    response.statusCode = statusCode;
-    response.headersSent = true;
-    const bag = isHeaderBag(third) ? third : (isHeaderBag(second) ? second : null);
-    if (bag) {
-      for (const [name, value] of Object.entries(bag)) headers.set(name.toLowerCase(), value);
-    }
-    return response;
-  };
-  const finished = new Promise((resolve, reject) => {
-    response.on("finish", () => resolve(Buffer.concat(chunks)));
-    response.on("error", reject);
-  });
-  return { response, headers, finished };
+async function bodyBytes(response) {
+  return Buffer.from(await response.arrayBuffer());
 }
 
 test("[param] captures one string", () => {
@@ -78,23 +36,21 @@ test("higher score selects sessions/archive over sessions/[id]", async () => {
   assert.deepEqual(selected.route.segments, ["sessions", "archive"]);
 
   let loaded = "";
-  const { response, finished } = createResponse();
-  await dispatch(createRequest("/api/sessions/archive"), response, routes, (file) => {
+  const response = await dispatch(createRequest("/api/sessions/archive"), routes, (file) => {
     loaded = file;
     return { GET: () => Response.json({ file }) };
   });
-  const bytes = await finished;
   assert.equal(loaded, "archive");
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(bytes, Buffer.from(JSON.stringify({ file: "archive" })));
+  assert.equal(response.status, 200);
+  // `Response.json` fixtures carry Bun's charset suffix.
+  assert.ok(response.headers.get("content-type").startsWith("application/json"));
+  assert.deepEqual(await bodyBytes(response), Buffer.from(JSON.stringify({ file: "archive" })));
 });
 
 test("unknown path responds 404 and does not call a handler", async () => {
   let calls = 0;
-  const { response, headers, finished } = createResponse();
-  await dispatch(
+  const response = await dispatch(
     createRequest("/api/does-not-exist"),
-    response,
     [{ segments: ["sessions", "archive"], file: "archive" }],
     () => {
       calls += 1;
@@ -106,19 +62,19 @@ test("unknown path responds 404 and does not call a handler", async () => {
       };
     },
   );
-  const bytes = await finished;
   assert.equal(calls, 0);
-  assert.equal(response.statusCode, 404);
-  assert.equal(headers.get("content-type"), "application/json");
-  assert.deepEqual(bytes, Buffer.from(JSON.stringify({ error: "Not found", code: "not_found" })));
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("content-type"), "application/json");
+  assert.deepEqual(await bodyBytes(response), Buffer.from(JSON.stringify({
+    error: "Not found",
+    code: "not_found",
+  })));
 });
 
 test("unexported method responds 405 with Allow and does not call a handler", async () => {
   let calls = 0;
-  const { response, headers, finished } = createResponse();
-  await dispatch(
+  const response = await dispatch(
     createRequest("/api/sessions/archive", "POST"),
-    response,
     [{ segments: ["sessions", "archive"], file: "archive" }],
     () => ({
       GET() {
@@ -131,24 +87,21 @@ test("unexported method responds 405 with Allow and does not call a handler", as
       },
     }),
   );
-  const bytes = await finished;
   assert.equal(calls, 0);
-  assert.equal(response.statusCode, 405);
-  assert.equal(headers.get("content-type"), "application/json");
-  const allow = String(headers.get("allow")).split(",").map((part) => part.trim());
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("content-type"), "application/json");
+  const allow = String(response.headers.get("allow")).split(",").map((part) => part.trim());
   assert.ok(allow.includes("GET"));
   assert.ok(allow.includes("PUT"));
-  assert.deepEqual(bytes, Buffer.from(JSON.stringify({
+  assert.deepEqual(await bodyBytes(response), Buffer.from(JSON.stringify({
     error: "Method not allowed",
     code: "method_not_allowed",
   })));
 });
 
-test("matching GET pipes Response.json body bytes", async () => {
-  const { response, headers, finished } = createResponse();
-  await dispatch(
+test("matching GET returns the handler Response body bytes", async () => {
+  const response = await dispatch(
     createRequest("/api/ping"),
-    response,
     [{ segments: ["ping"], file: "ping" }],
     () => ({
       GET() {
@@ -156,8 +109,7 @@ test("matching GET pipes Response.json body bytes", async () => {
       },
     }),
   );
-  const bytes = await finished;
-  assert.equal(response.statusCode, 200);
-  assert.equal(headers.get("content-type"), "application/json");
-  assert.deepEqual(bytes, Buffer.from(JSON.stringify({ ok: true })));
+  assert.equal(response.status, 200);
+  assert.ok(response.headers.get("content-type").startsWith("application/json"));
+  assert.deepEqual(await bodyBytes(response), Buffer.from(JSON.stringify({ ok: true })));
 });

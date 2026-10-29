@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { advanceGhost, acceptGhost, atLineEnd } = await jiti.import("./prediction.ts");
+const { advanceGhost, acceptGhost, atLineEnd } = await import("./prediction.ts");
 
 const ghost = { text: "Check the weath\nnext", cursor: 15, suffix: "er" };
 

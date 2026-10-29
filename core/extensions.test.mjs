@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
 const {
   EMPTY_EXTENSIONS,
   reduceExtensions,
   responseFor,
-} = await jiti.import("./extensions");
+} = await import("./extensions.ts");
 
 const dialog = (id, extra = {}) => ({ id, method: "confirm", title: `T${id}`, message: "m", ...extra });
 

@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { createJiti } from "jiti";
+import { test } from "bun:test";
 
-const jiti = createJiti(import.meta.url);
-const { transcriptToMarkdown, TRANSCRIPT_TOTAL_CHAR_LIMIT } = await jiti.import("./transcript.ts");
+const { transcriptToMarkdown, TRANSCRIPT_TOTAL_CHAR_LIMIT } = await import("./transcript.ts");
 
 test("a generic aborted request is not attributed to the user", () => {
   const md = transcriptToMarkdown([
