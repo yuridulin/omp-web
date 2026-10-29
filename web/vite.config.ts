@@ -1,0 +1,32 @@
+import { fileURLToPath } from "node:url";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      // The Bun server owns HTTP and SSE; the UI never imports its code.
+      "/api": {
+        target: "http://127.0.0.1:30178",
+        changeOrigin: false,
+        ws: true,
+      },
+    },
+  },
+  build: {
+    target: "es2022",
+    sourcemap: true,
+  },
+  test: {
+    environment: "happy-dom",
+    restoreMocks: true,
+  },
+});

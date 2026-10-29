@@ -53,6 +53,11 @@ bun test            # bun:test, no build step
 bun run typecheck   # tsc --noEmit
 bun run contract    # regenerate contract/open-api.yaml from route contracts
 bun run contract:check
+
+bun run web:dev     # Vite UI on http://127.0.0.1:5173 (proxies /api)
+bun run web:schema  # regenerate web/src/api/schema.d.ts from the contract
+bun run web:test
+bun run web:build
 ```
 
 Requires Bun 1.4.4+.

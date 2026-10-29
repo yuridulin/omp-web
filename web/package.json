@@ -1,0 +1,35 @@
+{
+  "name": "@kahme247/ompweb-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "bun run typecheck && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "schema": "bun ../scripts/generate-web-types.ts",
+    "schema:check": "bun ../scripts/generate-web-types.ts --check"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.105.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "cmdk": "^1.1.1",
+    "monaco-editor": "^0.57.0",
+    "openapi-fetch": "^0.17.0",
+    "radix-ui": "^1.8.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "happy-dom": "^21.0.4",
+    "typescript": "7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

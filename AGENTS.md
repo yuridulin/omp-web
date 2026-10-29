@@ -27,9 +27,9 @@ day-to-day repository rules.
   `events.md` for the SSE channels and terminal frames. Never hand-edit the
   generated spec: it is produced from the route contracts and committed with
   the code that changes it; CI runs `bun run contract:check`.
-- `web/` — the UI (M3). A classic frontend: HTTP only, types derived from
-  `contract/open-api.yaml`. It must not import from `core/`, `lib/` or
-  `server/`.
+- `web/` — the UI (M3). A classic SPA: React 19 + Vite 8 + TypeScript 7
+  (strict). HTTP only, types derived from `contract/open-api.yaml`; it must not
+  import from `core/`, `lib/` or `server/`.
 
 ## Conventions
 
@@ -43,6 +43,25 @@ day-to-day repository rules.
   artifact is a bug.
 - The server is the authority for session state: clients send intents and
   render snapshots. Raw `omp` frames are a debug channel, not a UI contract.
+
+## Web rules (`web/`)
+
+- Stack is fixed: React 19, Vite 8, TypeScript 7, TanStack Query, Monaco,
+  xterm.js, Radix/cmdk. No SSR, no Next/Remix, no file-based routing.
+- The typed client comes from the committed OpenAPI artifact:
+  `bun run web:schema`; CI runs `web:schema:check`. Never hand-write request
+  or response shapes that the contract already describes.
+- One external snapshot store per session (`useSyncExternalStore`); TanStack
+  Query is only the HTTP cache. No Redux and no domain logic in the client.
+- One multiplexed SSE connection (`/api/agent/events`); reconnect means
+  re-subscribe and render the first snapshot.
+- Explorer and git panels are our own components over `/api/workspace/*`.
+  VS Code ships only Monaco as a reusable library; its workbench panels are
+  not embeddable. DSH is a visual reference, not a source of components.
+- Styles: design tokens in `src/styles/tokens.css` + CSS Modules. Keyboard-first,
+  dense dark layout, no modal wizards.
+- Tests: Vitest + Testing Library; Playwright for flows when a flow exists.
+  `bun run web:typecheck`, `bun run web:test`, `bun run web:build` must pass.
 - Tests: `core/*.test.mjs` and `lib/**/*.test.mjs` using `bun:test` with
   direct `.ts` imports. Run `bun test` and `bun run typecheck` after changes.
 - Commit messages follow `Add ...`, `fix(scope): ...`, `test(scope): ...`.

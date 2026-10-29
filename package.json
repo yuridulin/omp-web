@@ -20,7 +20,13 @@
     "start": "bun server/index.ts",
     "dev": "bun --watch server/index.ts",
     "contract": "bun scripts/generate-openapi.ts",
-    "contract:check": "bun scripts/generate-openapi.ts --check"
+    "contract:check": "bun scripts/generate-openapi.ts --check",
+    "web:dev": "bun --cwd=web run dev",
+    "web:build": "bun --cwd=web run build",
+    "web:test": "bun --cwd=web run test",
+    "web:typecheck": "bun --cwd=web run typecheck",
+    "web:schema": "bun --cwd=web run schema",
+    "web:schema:check": "bun --cwd=web run schema:check"
   },
   "dependencies": {
     "mammoth": "^1.12.2",
@@ -33,6 +39,7 @@
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "@types/web-push": "^3.6.4",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5"
   },
   "files": [
@@ -51,5 +58,8 @@
   "type": "module",
   "trustedDependencies": [
     "node-pty"
+  ],
+  "workspaces": [
+    "web"
   ]
 }

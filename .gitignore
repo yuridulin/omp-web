@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+/web/node_modules
 
 # tests / build artifacts
 coverage/
@@ -8,6 +9,7 @@ coverage/
 /out/
 /build/
 /dist/
+/web/dist/
 .turbo/
 .cache/
 
