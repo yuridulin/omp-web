@@ -96,6 +96,22 @@ export class SessionMachine {
     this.#apply({ type: "history", messages, entryIds });
   }
 
+  /** Follow the wrapper's identity without resetting the live conversation. */
+  setSessionId(sessionId: string): void {
+    this.#apply({ type: "session-id", sessionId });
+    this.#setDraft(this.#readDraft(sessionId));
+  }
+
+  /** Drop in-flight output; the host calls this when a run/command ends. */
+  clearLive(): void {
+    this.#apply({ type: "clear-live" });
+  }
+
+  /** Start a new stream epoch; ordering and live output from the old one die. */
+  resetStream(streamId: string): void {
+    this.#apply({ type: "stream-reset", streamId });
+  }
+
   /**
    * The single entry point for every front end. Local intents change what is
    * shown; the rest become one frame and are reported as accepted or refused.

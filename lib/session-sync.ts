@@ -8,7 +8,7 @@ import {
   type HistoryRange,
 } from "../core/history.ts";
 import type { Snapshot } from "../core/machine";
-import type { AgentMessage, SessionContext } from "./types";
+import type { SessionContext } from "./types";
 
 export { MAX_SYNC_MESSAGES, historyCursor, parseHistoryCursor, selectHistoryRange };
 
@@ -23,23 +23,6 @@ export interface SessionStreamCursor {
   sequence: number;
 }
 
-export interface SessionLiveToolEvent {
-  type: "tool_execution_start" | "tool_execution_update";
-  toolCallId: string;
-  [key: string]: unknown;
-}
-
-export interface SessionLiveSnapshot {
-  cursor: SessionStreamCursor;
-  isStreaming: boolean;
-  isPromptRunning: boolean;
-  isCompacting: boolean;
-  streamingMessage: Partial<AgentMessage> | null;
-  toolEvents: SessionLiveToolEvent[];
-  /** Positive run-scoped evidence survives message_end's delayed file write. */
-  responseObserved?: boolean;
-}
-
 export interface SessionHistoryPage {
   mode: "append" | "replace";
   baseEntryId: string | null;
@@ -51,10 +34,8 @@ export interface SessionHistoryPage {
 export interface SessionSyncResponse extends SessionHistoryPage {
   sessionId: string;
   leafId: string | null;
-  /** Null for a file-only session or a view pinned to a historical branch. */
-  live: SessionLiveSnapshot | null;
   /** Authoritative core snapshot when a live wrapper exists. */
-  snapshot?: Snapshot | null;
+  snapshot: Snapshot | null;
 }
 
 /** Page the selected display path; an invalidated branch/compaction cursor resets it. */

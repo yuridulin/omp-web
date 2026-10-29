@@ -7,7 +7,7 @@ import { loadSessionFile } from "@/lib/omp/session-files";
 import { buildSessionContext, getSessionContextBoundary, getSessionEntriesForDisplayAsync, getSessionHistoryPage, readSessionHeader, SessionFileTooLargeError } from "@/lib/session-reader";
 import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 import { getRpcSession } from "@/lib/rpc-manager";
-import { getSessionAuthority } from "@/lib/session-authority";
+import { getSessionAuthority } from "@/lib/session-authority-registry";
 import { MAX_SYNC_MESSAGES, parseHistoryCursor, selectSessionHistory, type SessionHistoryCursor, type SessionSyncResponse } from "@/lib/session-sync";
 
 /** Uniform error mapping for this route: the display read throws
@@ -45,7 +45,6 @@ export const contract = routeContract({
         entryIds: z.array(z.string()).optional(),
         sessionId: z.string().optional(),
         leafId: z.string().nullable().optional(),
-        live: z.unknown().nullable().optional(),
         snapshot: z.unknown().nullable().optional(),
         mode: z.enum(["append", "replace"]).optional(),
         baseEntryId: z.string().nullable().optional(),
@@ -113,12 +112,13 @@ export async function GET(
         if (boundary === "1") {
           return json({ entryIds: [] }, { headers: { "Cache-Control": "no-store" } });
         }
+        const authority = getSessionAuthority(id);
+        await authority?.refreshHistory();
         const response: SessionSyncResponse = {
           ...selectSessionHistory(buildSessionContext([]), cursor, limit),
           sessionId: id,
           leafId: null,
-          live: session.getStreamSnapshot(),
-          snapshot: getSessionAuthority(id)?.snapshot ?? null,
+          snapshot: authority?.snapshot ?? null,
         };
         return json(response, { headers: { "Cache-Control": "no-store" } });
       }
@@ -149,11 +149,16 @@ export async function GET(
       // Sample AFTER the disk read: a quiet active run still supplies its most
       // recent partial output, and events arriving during the read win.
       const session = getRpcSession(id);
-      const live = session?.isAlive() && (leafId === undefined || leafId === page.tipId)
-        ? session.getStreamSnapshot()
+      const authority = session?.isAlive() && (leafId === undefined || leafId === page.tipId)
+        ? getSessionAuthority(id)
         : null;
-      const snapshot = live ? getSessionAuthority(id)?.snapshot ?? null : null;
-      const response: SessionSyncResponse = { ...page.history, sessionId: id, leafId: page.leafId, live, snapshot };
+      await authority?.refreshHistory();
+      const response: SessionSyncResponse = {
+        ...page.history,
+        sessionId: id,
+        leafId: page.leafId,
+        snapshot: authority?.snapshot ?? null,
+      };
       return json(response, { headers: { "Cache-Control": "no-store" } });
     }
     // Deduplicated cached read; blob resolution on per-entry deep copies.

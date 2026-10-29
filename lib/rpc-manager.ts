@@ -40,7 +40,10 @@ import type {
   WebSessionState,
 } from "./pi-types";
 import type { AgentMessage, CrossSessionHostToolCall, ExitedRpcSession, ExtensionWidgetItem, ProjectLaunchConfig } from "./types";
-import type { SessionLiveSnapshot, SessionLiveToolEvent, SessionStreamCursor } from "./session-sync";
+import type { SessionStreamCursor } from "./session-sync";
+import { SessionAuthority } from "./session-authority";
+import type { ChatIntent } from "../core/commands";
+import type { DispatchResult, Snapshot } from "../core/machine";
 import {
   bindCommandDispatch,
   dispatchCommand,
@@ -238,8 +241,6 @@ export class AgentSessionWrapper {
   private compacting = false;
   private streamId = randomUUID();
   private streamSequence = 0;
-  private streamingMessage: Partial<AgentMessage> | null = null;
-  private liveToolEvents = new Map<string, SessionLiveToolEvent>();
   /** Positive evidence for this run, retained after native completion but before disk append. */
   private responseObserved = false;
   private responseRunActive = false;
@@ -292,6 +293,8 @@ export class AgentSessionWrapper {
   /** Process whose exit is expected because reload is deliberately disposing it. */
   private expectedExitProc: RpcProcess | null = null;
   readonly cwd: string;
+  /** The conversation state machine for this wrapper; the only live model. */
+  readonly authority: SessionAuthority;
   /** Whether the child was spawned with --advisor. The flag is spawn-time
    * only (no runtime RPC toggles it), so applying a changed advisor setting
    * means replacing an idle child on the next startRpcSession call. */
@@ -319,6 +322,8 @@ export class AgentSessionWrapper {
     this.advisorSpawned = advisorSpawned;
     this._sessionId = expectedSessionId;
     this.disconnectDestroyMs = disconnectDestroyMs;
+    this.authority = new SessionAuthority(this);
+    this.authority.start();
   }
 
   get sessionId(): string {
@@ -362,31 +367,50 @@ export class AgentSessionWrapper {
     reapIfDisconnected.call(this as never);
   }
 
-  /** NDJSON messages are fresh snapshots; copy containers, not token payloads. */
-  getStreamSnapshot(): SessionLiveSnapshot {
-    return {
-      cursor: { streamId: this.streamId, sequence: this.streamSequence },
-      isStreaming: this.streaming,
-      isPromptRunning: this.promptRunning,
-      isCompacting: this.compacting,
-      responseObserved: this.responseObserved,
-      streamingMessage: this.streamingMessage ? { ...this.streamingMessage } : null,
-      toolEvents: Array.from(this.liveToolEvents.values(), (event) => ({ ...event })),
-    };
+  get snapshot(): Snapshot {
+    return this.authority.snapshot;
+  }
+
+  subscribe(listener: (snapshot: Snapshot) => void): () => void {
+    return this.authority.subscribe(listener);
+  }
+
+  dispatch(intent: ChatIntent): Promise<DispatchResult> {
+    return this.authority.dispatch(intent);
+  }
+
+  refreshHistory(): Promise<void> {
+    return this.authority.refreshHistory();
+  }
+
+  /** Host lifecycle flags; the conversation state lives in `snapshot`. */
+  isPromptRunning(): boolean {
+    return this.promptRunning;
+  }
+
+  isStreamingResponse(): boolean {
+    return this.streaming;
+  }
+
+  isCompactingSession(): boolean {
+    return this.compacting;
+  }
+
+  hasResponseObserved(): boolean {
+    return this.responseObserved;
   }
 
   private clearLiveSnapshots(): void {
-    this.streamingMessage = null;
-    this.liveToolEvents.clear();
+    this.authority.clearLive();
     this.streamSequence += 1;
   }
 
   private resetStream(): void {
-    this.clearLiveSnapshots();
     this.responseObserved = false;
     this.responseRunActive = false;
     this.streamId = randomUUID();
     this.streamSequence = 0;
+    this.authority.resetStream(this.streamId);
   }
 
   start(): void {
@@ -420,6 +444,7 @@ export class AgentSessionWrapper {
     this._sessionId = state.sessionId;
     this._sessionFile = state.sessionFile ?? "";
     this._sessionName = state.sessionName;
+    if (oldId !== this._sessionId) this.authority.setSessionId(this._sessionId);
     this.streaming = state.isStreaming;
     this.compacting = state.isCompacting;
     this.fastModeEnabled = state.fastModeEnabled ?? state.fastMode ?? this.fastModeEnabled;
@@ -900,35 +925,23 @@ export class AgentSessionWrapper {
         this.clearLiveSnapshots();
         break;
       case "message_start":
-      case "message_update": {
-        const message = event.message as Partial<AgentMessage> | undefined;
-        if (message && message.role !== "user") this.streamingMessage = message;
-        if (this.responseRunActive && hasVisibleAssistantContent(message)) this.responseObserved = true;
-        break;
-      }
+      case "message_update":
       case "message_end": {
         const message = event.message as Partial<AgentMessage> | undefined;
         if (this.responseRunActive && hasVisibleAssistantContent(message)) this.responseObserved = true;
-        if (message?.role && message.role === this.streamingMessage?.role) this.streamingMessage = null;
-        if (message?.role === "toolResult" && message.toolCallId) this.liveToolEvents.delete(message.toolCallId);
         break;
       }
-      case "tool_execution_start":
-      case "tool_execution_update":
-        if (typeof event.toolCallId === "string") {
-          this.liveToolEvents.set(event.toolCallId, {
-            ...this.liveToolEvents.get(event.toolCallId),
-            ...event,
-            type: event.type,
-            toolCallId: event.toolCallId,
-          });
-        }
-        break;
-      case "tool_execution_end":
-        if (typeof event.toolCallId === "string") this.liveToolEvents.delete(event.toolCallId);
-        break;
     }
     event.web = { streamId: this.streamId, sequence: ++this.streamSequence };
+    // The server authority observes the frame before UI fanout, so a listener
+    // always sees a snapshot that includes the event it was handed.
+    for (const l of this.frameObservers) {
+      try {
+        l(event as AgentEvent);
+      } catch {
+        // An internal observer must never break the frame fanout.
+      }
+    }
     for (const l of this.listeners) {
       try {
         l(event as AgentEvent);
@@ -936,13 +949,6 @@ export class AgentSessionWrapper {
         // A throwing subscriber (SSE encode failure, UI handler bug) must not
         // starve the remaining subscribers — same isolation RpcProcess and
         // notifyRunningChange apply to their listener sets.
-      }
-    }
-    for (const l of this.frameObservers) {
-      try {
-        l(event as AgentEvent);
-      } catch {
-        // An internal observer must never break the frame fanout.
       }
     }
   }

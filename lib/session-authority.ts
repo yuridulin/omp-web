@@ -4,7 +4,7 @@ import { parseDraft } from "../core/drafts";
 import type { AgentMessage } from "../core/types";
 import type { Clock, DraftStorage, Transport } from "../core/ports";
 import { clearDraft, getDraft, setDraft } from "./draft-store";
-import { getRpcSession, type AgentEvent, type AgentSessionWrapper } from "./rpc-manager";
+import type { AgentEvent } from "./rpc-manager";
 import {
   buildSessionContext,
   getSessionEntriesForDisplayAsync,
@@ -16,8 +16,8 @@ import {
  *
  * The core `SessionMachine` owns the conversation state; this adapter supplies
  * the host pieces it cannot know: the omp wrapper as transport, the session
- * file as history, and the draft store. Routes render `snapshot` and send
- * `dispatch` intents; raw omp frames stay a debug channel.
+ * file as history, and the draft store. `AgentSessionWrapper` owns one
+ * instance; routes render `snapshot` and send `dispatch` intents.
  */
 
 /** The slice of `AgentSessionWrapper` the authority needs. */
@@ -135,6 +135,7 @@ export class SessionAuthority {
   }
 
   subscribe(listener: (snapshot: Snapshot) => void): () => void {
+    void this.refreshHistory();
     return this.#machine.subscribe(listener);
   }
 
@@ -145,7 +146,21 @@ export class SessionAuthority {
   start(): void {
     if (this.#disposed) return;
     this.#machine.open(this.#session.sessionId);
-    void this.refreshHistory();
+  }
+
+  /** Follow the wrapper's identity without resetting the live conversation. */
+  setSessionId(sessionId: string): void {
+    this.#machine.setSessionId(sessionId);
+  }
+
+  /** Drop in-flight output; the host calls this when a run/command ends. */
+  clearLive(): void {
+    this.#machine.clearLive();
+  }
+
+  /** Start a new stream epoch after an identity change or child restart. */
+  resetStream(streamId: string): void {
+    this.#machine.resetStream(streamId);
   }
 
   dispose(): void {
@@ -184,19 +199,6 @@ export class SessionAuthority {
   }
 }
 
-const authorities = new WeakMap<AuthoritySession, SessionAuthority>();
-
-/** The authority for a live wrapper, created on first use. */
-export function authorityFor(session: AuthoritySession): SessionAuthority {
-  let authority = authorities.get(session);
-  if (!authority) {
-    authority = new SessionAuthority(session);
-    authorities.set(session, authority);
-    authority.start();
-  }
-  return authority;
-}
-
 export type SnapshotFrameSnapshot = Omit<Snapshot, "session"> & {
   session: Omit<Snapshot["session"], "messages" | "entryIds">
     & Partial<Pick<Snapshot["session"], "messages" | "entryIds">>;
@@ -230,10 +232,4 @@ export function snapshotFrame(snapshot: Snapshot, includeHistory: boolean): Snap
     history: false,
     snapshot: { ...snapshot, session },
   };
-}
-
-/** The authority for a session id, or null when omp-web does not own it. */
-export function getSessionAuthority(sessionId: string): SessionAuthority | null {
-  const wrapper: AgentSessionWrapper | undefined = getRpcSession(sessionId);
-  return wrapper?.isAlive() ? authorityFor(wrapper) : null;
 }

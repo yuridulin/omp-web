@@ -113,6 +113,8 @@ export interface ToolResultMessage {
    * `tool_execution_update`), not a committed result. Rendering treats it as
    * "running" and keeps it out of the session's toolResult list. */
   partial?: boolean;
+  /** Arguments of a live tool call, for the running-tool display. */
+  args?: unknown;
   /** Sanitized one-line passive context omp emitted after this result's tool
    * batch (`collectToolResults`); display-only, never part of the result. */
   passiveContext?: string;

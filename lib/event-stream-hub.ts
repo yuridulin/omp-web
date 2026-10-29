@@ -5,7 +5,7 @@ import { getAllowedFileRoots, isExistingFilePathAllowed } from "./file-access";
 import { filePathApiSegments } from "./file-paths";
 import { attachNotificationClient } from "./notification-hub";
 import { getExitedRpcSessions, getRpcSession, getRunningRpcSessions, subscribeHostToolCalls, subscribeRunningSessions } from "./rpc-manager";
-import { authorityFor, snapshotFrame } from "./session-authority";
+import { snapshotFrame } from "./session-authority";
 import { subscribeSessionFileChanges } from "./session-watcher";
 import { watchWorkspace } from "./workspace-watcher";
 import {
@@ -304,7 +304,7 @@ async function openWorkspaceChannel(root: string, handle: SubscriptionHandle): P
 }
 
 // Agent events of one live omp wrapper.
-function openSessionChannel(sessionId: string, handle: SubscriptionHandle): SubscribeResult {
+async function openSessionChannel(sessionId: string, handle: SubscriptionHandle): Promise<SubscribeResult> {
   // Observer-only: opening a saved session must not create another omp
   // process for a terminal-owned session. Explicit commands use
   // POST /api/agent/sessions/[id]/command, which starts the wrapper first.
@@ -312,7 +312,7 @@ function openSessionChannel(sessionId: string, handle: SubscriptionHandle): Subs
   const session = existing?.isAlive() ? existing : undefined;
   if (!session) return { ok: false, status: 409, error: "Session is not managed by omp-web", code: "session_not_managed" };
 
-  const authority = authorityFor(session);
+  const authority = session.authority;
   handle.open();
   // onEvent can synchronously replay pending UI requests. Subscribe before
   // sampling the cursor/announcing readiness so catch-up has no event gap.
@@ -327,7 +327,13 @@ function openSessionChannel(sessionId: string, handle: SubscriptionHandle): Subs
     detachFrames();
     detachSnapshots();
   });
-  handle.send({ type: "connected", sessionId, web: session.getStreamSnapshot().cursor });
+  const cursor = authority.snapshot.session;
+  handle.send({
+    type: "connected",
+    sessionId,
+    web: { streamId: cursor.streamId, sequence: cursor.sequence },
+  });
+  await authority.refreshHistory();
   const initial = authority.snapshot;
   lastRevision = initial.session.historyRevision;
   handle.send(snapshotFrame(initial, true));

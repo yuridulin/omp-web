@@ -1,4 +1,5 @@
 import type { AgentMessage, UserMessage } from "./types";
+import { isRecord } from "./guards";
 import {
   isTerminalAgentEnd,
   readAssistantPayload,
@@ -35,7 +36,10 @@ export type SessionAction =
   | { type: "notice"; notice: Notice }
   | { type: "dismiss-notice"; id: string }
   | { type: "view"; view: Partial<SessionState["view"]> }
-  | { type: "reset"; sessionId: string | null };
+  | { type: "reset"; sessionId: string | null }
+  | { type: "session-id"; sessionId: string }
+  | { type: "clear-live" }
+  | { type: "stream-reset"; streamId: string };
 
 export function reduce(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
@@ -85,6 +89,22 @@ export function reduce(state: SessionState, action: SessionAction): SessionState
         sequence: 0,
         streamId: null,
         historyRevision: state.historyRevision + 1,
+      };
+    case "session-id":
+      return state.sessionId === action.sessionId ? state : { ...state, sessionId: action.sessionId };
+    case "clear-live":
+      return {
+        ...state,
+        stream: { active: false, message: null, held: false },
+        toolResults: {},
+      };
+    case "stream-reset":
+      return {
+        ...state,
+        streamId: action.streamId,
+        sequence: 0,
+        stream: { active: false, message: null, held: false },
+        toolResults: {},
       };
     default:
       return state;
@@ -154,11 +174,24 @@ function applyFrame(state: SessionState, frame: WireEvent, at: number): SessionS
     }
 
     case "message_end": {
-      const message = readAssistantPayload(frame.message) ?? next.stream.message;
-      const visible = hasVisibleAssistantContent(message);
+      const raw = frame.message;
+      const toolCallId = isRecord(raw) && raw.role === "toolResult" && typeof raw.toolCallId === "string"
+        ? raw.toolCallId
+        : null;
+      let toolResults = next.toolResults;
+      if (toolCallId && toolCallId in toolResults) {
+        const { [toolCallId]: _removed, ...rest } = toolResults;
+        toolResults = rest;
+      }
+      const payload = readAssistantPayload(raw);
+      // A user steering message or a tool result does not end the assistant
+      // stream; only the assistant message itself does.
+      if (!payload) return toolResults === next.toolResults ? next : { ...next, toolResults };
+      const visible = hasVisibleAssistantContent(payload);
       return {
         ...next,
-        stream: { active: false, message: visible ? message : null, held: visible },
+        toolResults,
+        stream: { active: false, message: visible ? payload : null, held: visible },
         run: { ...next.run, hadContent: next.run.hadContent || visible },
       };
     }
@@ -172,6 +205,7 @@ function applyFrame(state: SessionState, frame: WireEvent, at: number): SessionS
         ...withNotice,
         run: { ...withNotice.run, status: "idle", error },
         stream: { ...withNotice.stream, active: false },
+        toolResults: {},
         lastError: error ?? withNotice.lastError,
         // A run that ended without visible output may still have written to the
         // session file (resume, compaction): re-read instead of asserting empty.
@@ -184,7 +218,18 @@ function applyFrame(state: SessionState, frame: WireEvent, at: number): SessionS
       const toolCallId = typeof frame.toolCallId === "string" ? frame.toolCallId : null;
       const result = readToolResult(frame, toolCallId);
       if (!result || !toolCallId) return next;
-      return { ...next, toolResults: { ...next.toolResults, [toolCallId]: result } };
+      const existing = next.toolResults[toolCallId];
+      return {
+        ...next,
+        toolResults: { ...next.toolResults, [toolCallId]: { ...existing, ...result } },
+      };
+    }
+
+    case "tool_execution_end": {
+      const toolCallId = typeof frame.toolCallId === "string" ? frame.toolCallId : null;
+      if (!toolCallId || !(toolCallId in next.toolResults)) return next;
+      const { [toolCallId]: _removed, ...rest } = next.toolResults;
+      return { ...next, toolResults: rest };
     }
 
     case "queue_update": {

@@ -3,7 +3,7 @@ import { json } from "@/server/http";
 import { errorEnvelope, routeContract } from "@/server/contract";
 import { exitedSessionSchema } from "@/server/schemas/agent";
 import { getExitedRpcSession, getRpcSession, WebRpcError } from "@/lib/rpc-manager";
-import { getSessionAuthority } from "@/lib/session-authority";
+import { getSessionAuthority } from "@/lib/session-authority-registry";
 import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 
 export const contract = routeContract({
@@ -36,9 +36,11 @@ export async function GET(
     if (rpc?.isAlive()) {
       try {
         const state = await rpc.send({ type: "get_state" });
+        const authority = getSessionAuthority(id);
+        await authority?.refreshHistory();
         // `state` is omp's own snapshot; `snapshot` is the server authority's
         // core model. Clients render the latter and treat the former as detail.
-        return json({ running: true, state, snapshot: getSessionAuthority(id)?.snapshot });
+        return json({ running: true, state, snapshot: authority?.snapshot });
       } catch (error) {
         if (error instanceof WebRpcError && error.code === "session_unresponsive") {
           return json({ running: false, recovered: true });

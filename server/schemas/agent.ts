@@ -84,18 +84,7 @@ export const sessionContextSchema = z.looseObject({
   todoPhases: z.array(z.unknown()),
 });
 
-/** Mid-run stream state of one live omp child. */
-export const sessionLiveSnapshotSchema = z.looseObject({
-  cursor: z.looseObject({ streamId: z.string(), sequence: z.number() }),
-  isStreaming: z.boolean(),
-  isPromptRunning: z.boolean(),
-  isCompacting: z.boolean(),
-  streamingMessage: z.unknown().nullable(),
-  toolEvents: z.array(z.unknown()),
-  responseObserved: z.boolean().optional(),
-});
-
-/** Incremental history page plus its live-stream attachment (`SessionSyncResponse`). */
+/** Incremental history page plus the authoritative live snapshot. */
 export const sessionSyncResponseSchema = z.looseObject({
   mode: z.enum(["append", "replace"]),
   baseEntryId: z.string().nullable(),
@@ -104,7 +93,6 @@ export const sessionSyncResponseSchema = z.looseObject({
   hasMore: z.boolean(),
   sessionId: z.string(),
   leafId: z.string().nullable(),
-  live: sessionLiveSnapshotSchema.nullable(),
   snapshot: z.unknown().nullable().optional(),
 });
 

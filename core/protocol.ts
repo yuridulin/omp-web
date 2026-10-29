@@ -53,13 +53,17 @@ export function readToolResult(
   toolCallId: string | null,
 ): ToolResultMessage | null {
   if (!isRecord(value) || !toolCallId) return null;
+  // `tool_execution_*` frames carry the payload under `partialResult`; a
+  // committed result message carries `content` directly.
+  const payload = isRecord(value.partialResult) ? value.partialResult : value;
   return {
     role: "toolResult",
     toolCallId,
-    toolName: typeof value.toolName === "string" ? value.toolName : undefined,
-    content: Array.isArray(value.content) ? (value.content as ToolResultMessage["content"]) : [],
+    ...(typeof value.toolName === "string" ? { toolName: value.toolName } : {}),
+    content: Array.isArray(payload.content) ? (payload.content as ToolResultMessage["content"]) : [],
+    ...(value.args === undefined ? {} : { args: value.args }),
     partial: true,
-    timestamp: typeof value.timestamp === "number" ? value.timestamp : undefined,
+    ...(typeof value.timestamp === "number" ? { timestamp: value.timestamp } : {}),
   };
 }
 

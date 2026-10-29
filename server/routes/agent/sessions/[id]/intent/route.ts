@@ -4,7 +4,7 @@ import { routeContract } from "@/server/contract";
 import { parseJsonWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
 import { MAX_AGENT_COMMAND_REQUEST_BYTES } from "@/lib/image-attachments";
 import { parseChatIntent } from "@/core/commands";
-import { getSessionAuthority } from "@/lib/session-authority";
+import { getSessionAuthority } from "@/lib/session-authority-registry";
 import { chatIntentSchema } from "./schema";
 
 export const contract = routeContract({

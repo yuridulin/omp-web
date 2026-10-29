@@ -1917,10 +1917,6 @@ paths:
                     type:
                       - string
                       - "null"
-                  live:
-                    anyOf:
-                      - {}
-                      - type: "null"
                   snapshot:
                     anyOf:
                       - {}
