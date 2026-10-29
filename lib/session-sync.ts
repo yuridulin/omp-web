@@ -7,6 +7,7 @@ import {
   type HistoryCursor,
   type HistoryRange,
 } from "../core/history.ts";
+import type { Snapshot } from "../core/machine";
 import type { AgentMessage, SessionContext } from "./types";
 
 export { MAX_SYNC_MESSAGES, historyCursor, parseHistoryCursor, selectHistoryRange };
@@ -52,6 +53,8 @@ export interface SessionSyncResponse extends SessionHistoryPage {
   leafId: string | null;
   /** Null for a file-only session or a view pinned to a historical branch. */
   live: SessionLiveSnapshot | null;
+  /** Authoritative core snapshot when a live wrapper exists. */
+  snapshot?: Snapshot | null;
 }
 
 /** Page the selected display path; an invalidated branch/compaction cursor resets it. */

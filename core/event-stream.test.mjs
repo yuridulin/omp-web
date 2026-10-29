@@ -10,7 +10,7 @@ const {
 } = await import("./event-stream.ts");
 
 test("the wire constants are the documented ones", () => {
-  assert.equal(EVENT_STREAM_PATH, "/api/events");
+  assert.equal(EVENT_STREAM_PATH, "/api/agent/events");
   assert.equal(MUX_CONTROL_EVENT, "mux");
   assert.equal(UNKNOWN_CONNECTION_CODE, "unknown_connection");
 });
@@ -31,6 +31,10 @@ test("accepts every channel kind with a valid payload", () => {
     parseEventStreamChannel({ kind: "file", path: "/repo/a.ts", sessionId: "s1" }),
     { kind: "file", path: "/repo/a.ts", sessionId: "s1" },
   );
+  assert.deepEqual(
+    parseEventStreamChannel({ kind: "workspace", root: "/repo" }),
+    { kind: "workspace", root: "/repo" },
+  );
 });
 
 test("rejects malformed or unbounded channel payloads", () => {
@@ -40,8 +44,10 @@ test("rejects malformed or unbounded channel payloads", () => {
   assert.equal(parseEventStreamChannel({ kind: "session" }), null);
   assert.equal(parseEventStreamChannel({ kind: "session", sessionId: "" }), null);
   assert.equal(parseEventStreamChannel({ kind: "session", sessionId: "x".repeat(513) }), null);
-  assert.equal(parseEventStreamChannel({ kind: "file", path: "" }), null);
+  assert.equal(parseEventStreamChannel({ kind: "file", path: "", }), null);
   assert.equal(parseEventStreamChannel({ kind: "file", path: "/a", sessionId: 5 }), null);
+  assert.equal(parseEventStreamChannel({ kind: "workspace", root: "" }), null);
+  assert.equal(parseEventStreamChannel({ kind: "workspace" }), null);
   // Notification client ids are strict: no whitespace and bounded length.
   assert.equal(parseEventStreamChannel({ kind: "notifications", clientId: "short" }), null);
   assert.equal(parseEventStreamChannel({ kind: "notifications", clientId: "has space" }), null);

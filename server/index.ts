@@ -1,8 +1,12 @@
 import { readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { NextRequest } from "./http.ts";
+import { json } from "./http.ts";
+import { isHttpMethod, readRouteContract } from "./contract.ts";
+import { validateRequest } from "./request-contract.ts";
 import { crossOriginRejection } from "./cross-origin.ts";
+import { isRecord } from "../core/guards.ts";
+import { createTerminal, TerminalError, type TerminalSession } from "../lib/terminal.ts";
 
 /**
  * Minimal Bun.serve server for the omp API.
@@ -32,7 +36,7 @@ export function routeScore(segments: readonly string[]): number {
   }, 0);
 }
 
-function collectRoutes(dir = routesRoot): Route[] {
+export function collectRoutes(dir = routesRoot): Route[] {
   const routes: Route[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -83,12 +87,12 @@ export function selectRoute<T extends { segments: readonly string[] }>(
   return null;
 }
 
-/** Server-generated JSON. The handlers' `Response.json` adds a charset. */
-function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json", ...headers },
-  });
+const ROUTE_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
+
+/** Methods advertised in `Allow`; HEAD is implied by GET. */
+function allowedMethods(module: Record<string, unknown>): string[] {
+  const has = (name: string) => typeof module[name] === "function";
+  return ROUTE_METHODS.filter((name) => has(name) || (name === "HEAD" && has("GET")));
 }
 
 export type RouteModuleLoader = (file: string) => Promise<Record<string, unknown>>;
@@ -124,18 +128,29 @@ export async function dispatch(
   if (pathSegments[0] === "api") pathSegments.shift();
 
   const selected = selectRoute(routes, pathSegments);
-  if (!selected) return json({ error: "Not found", code: "not_found" }, 404);
+  if (!selected) return json({ error: "Not found", code: "not_found" }, { status: 404 });
 
   const module = await loadModule(selected.route.file);
   const params = selected.params;
 
-  const handler = module[method] as
+  // HEAD is GET without the body per RFC 9110; only a route's own HEAD
+  // export overrides that.
+  const handlerName = method === "HEAD" && typeof module.HEAD !== "function" ? "GET" : method;
+  const handler = module[handlerName] as
     | ((request: Request, context: { params: Promise<Record<string, string | string[]>> }) => Promise<Response> | Response)
     | undefined;
   if (typeof handler !== "function") {
-    return json({ error: "Method not allowed", code: "method_not_allowed" }, 405, {
-      allow: Object.keys(module).join(", "),
+    return json({ error: "Method not allowed", code: "method_not_allowed" }, {
+      status: 405,
+      headers: { allow: allowedMethods(module).join(", ") },
     });
+  }
+
+  const contract = readRouteContract(module.contract);
+  const operation = contract && isHttpMethod(handlerName) ? contract[handlerName] : undefined;
+  if (operation) {
+    const invalid = await validateRequest(operation, request, url);
+    if (invalid) return invalid;
   }
 
   const init: RequestInit & { duplex?: "half" } = {
@@ -147,15 +162,21 @@ export async function dispatch(
     init.body = request.body;
     init.duplex = "half";
   }
-  const webRequest = new NextRequest(url.href, init);
+  const webRequest = new Request(url.href, init);
 
   try {
-    return await handler(webRequest, { params: Promise.resolve(params) });
+    const response = await handler(webRequest, { params: Promise.resolve(params) });
+    if (method !== "HEAD") return response;
+    return new Response(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   } catch (error) {
     return json({
       error: error instanceof Error ? error.message : String(error),
       code: "internal_error",
-    }, 500);
+    }, { status: 500 });
   }
 }
 
@@ -164,6 +185,135 @@ export async function dispatch(
  * main() does not listen. */
 async function preloadRouteModules(routes: Route[]): Promise<void> {
   await Promise.all(routes.map((route) => loadRouteModule(route.file)));
+}
+
+export const TERMINAL_PATH = "/api/workspace/terminal";
+
+interface TerminalSocketData {
+  terminal: TerminalSession | null;
+  creating: boolean;
+}
+
+function sendSocket(ws: Bun.ServerWebSocket<TerminalSocketData>, payload: unknown): void {
+  try {
+    ws.send(JSON.stringify(payload));
+  } catch {
+    // The socket closed between the terminal event and the send.
+  }
+}
+
+function sendTerminalError(ws: Bun.ServerWebSocket<TerminalSocketData>, error: unknown): void {
+  if (error instanceof TerminalError) {
+    sendSocket(ws, { type: "error", error: error.message, code: error.code });
+    return;
+  }
+  sendSocket(ws, {
+    type: "error",
+    error: error instanceof Error ? error.message : String(error),
+    code: "terminal_failed",
+  });
+}
+
+async function handleTerminalMessage(
+  ws: Bun.ServerWebSocket<TerminalSocketData>,
+  raw: string | Buffer,
+): Promise<void> {
+  let message: unknown;
+  try {
+    message = JSON.parse(typeof raw === "string" ? raw : raw.toString("utf8"));
+  } catch {
+    sendSocket(ws, { type: "error", error: "Invalid terminal message", code: "invalid_message" });
+    return;
+  }
+  if (!isRecord(message) || typeof message.type !== "string") {
+    sendSocket(ws, { type: "error", error: "Invalid terminal message", code: "invalid_message" });
+    return;
+  }
+
+  const data = ws.data;
+  switch (message.type) {
+    case "create": {
+      if (data.terminal) {
+        sendSocket(ws, { type: "error", error: "Terminal already created", code: "terminal_exists" });
+        return;
+      }
+      if (data.creating) {
+        sendSocket(ws, { type: "error", error: "Terminal is being created", code: "terminal_creating" });
+        return;
+      }
+      data.creating = true;
+      try {
+        const terminal = await createTerminal({
+          cwd: message.cwd,
+          cols: message.cols,
+          rows: message.rows,
+        });
+        data.terminal = terminal;
+        terminal.onData((chunk) => sendSocket(ws, { type: "output", data: chunk }));
+        terminal.onExit((exitCode) => {
+          sendSocket(ws, { type: "exit", exitCode });
+          try {
+            ws.close(1000, "exit");
+          } catch {
+            // Already closing.
+          }
+        });
+        sendSocket(ws, { type: "created", id: terminal.id, pid: terminal.pid, cwd: terminal.cwd });
+      } catch (error) {
+        sendTerminalError(ws, error);
+        try {
+          ws.close(1011, "create failed");
+        } catch {
+          // Already closing.
+        }
+      } finally {
+        data.creating = false;
+      }
+      return;
+    }
+    case "input": {
+      if (!data.terminal) {
+        sendSocket(ws, { type: "error", error: "Terminal is not created", code: "terminal_missing" });
+        return;
+      }
+      if (typeof message.data !== "string") {
+        sendSocket(ws, { type: "error", error: "Invalid terminal message", code: "invalid_message" });
+        return;
+      }
+      try {
+        data.terminal.write(message.data);
+      } catch (error) {
+        sendTerminalError(ws, error);
+      }
+      return;
+    }
+    case "resize": {
+      data.terminal?.resize(Number(message.cols), Number(message.rows));
+      return;
+    }
+    case "close": {
+      data.terminal?.kill();
+      try {
+        ws.close(1000, "closed");
+      } catch {
+        // Already closing.
+      }
+      return;
+    }
+    default:
+      sendSocket(ws, { type: "error", error: "Unknown terminal message", code: "invalid_message" });
+  }
+}
+
+/** Browsers must not open a cross-site WebSocket; non-browser clients omit Origin. */
+function sameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === new URL(request.url).host;
+  } catch {
+    return false;
+  }
 }
 
 async function main(): Promise<void> {
@@ -177,18 +327,49 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   try {
-    const server = Bun.serve({
+    const server = Bun.serve<TerminalSocketData>({
       hostname: host,
       port,
       // Bun closes idle streams after 10 s; /api/events heartbeats every 30 s.
       idleTimeout: 0,
-      fetch: (request) => dispatch(request, routes),
+      fetch: (request, server) => {
+        if (new URL(request.url).pathname === TERMINAL_PATH) {
+          if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+            return json(
+              { error: "WebSocket upgrade required", code: "upgrade_required" },
+              { status: 426 },
+            );
+          }
+          if (!sameOrigin(request)) {
+            return json(
+              { error: "Cross-origin WebSocket rejected", code: "cross_origin" },
+              { status: 403 },
+            );
+          }
+          const upgraded = server.upgrade(request, {
+            data: { terminal: null, creating: false },
+          });
+          return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+        }
+        return dispatch(request, routes);
+      },
+      websocket: {
+        maxPayloadLength: 1024 * 1024,
+        idleTimeout: 0,
+        message(ws, message) {
+          void handleTerminalMessage(ws, message);
+        },
+        close(ws) {
+          ws.data.terminal?.kill();
+          ws.data.terminal = null;
+        },
+      },
       error(error) {
         console.error(error);
         return json({
           error: error instanceof Error ? error.message : String(error),
           code: "internal_error",
-        }, 500);
+        }, { status: 500 });
       },
     });
     console.log(`omp api listening on ${server.url} (${routes.length} routes)`);

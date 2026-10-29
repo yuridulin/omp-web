@@ -18,13 +18,17 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "start": "bun server/index.ts",
-    "dev": "bun server/index.ts"
+    "dev": "bun --watch server/index.ts",
+    "contract": "bun scripts/generate-openapi.ts",
+    "contract:check": "bun scripts/generate-openapi.ts --check"
   },
   "dependencies": {
+    "mammoth": "^1.12.2",
+    "node-pty": "^1.1.0",
     "sharp": "^0.35.4",
     "web-push": "^3.6.7",
     "yaml": "^2",
-    "mammoth": "^1.12.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
@@ -35,6 +39,7 @@
     "core",
     "lib",
     "server",
+    "contract",
     "README.md",
     "LICENSE"
   ],
@@ -43,5 +48,8 @@
     "./core": "./core/index.ts",
     "./lib/*": "./lib/*.ts"
   },
-  "type": "module"
+  "type": "module",
+  "trustedDependencies": [
+    "node-pty"
+  ]
 }

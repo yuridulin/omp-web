@@ -9,7 +9,7 @@ export interface SearchRow {
 /**
  * Turn ranked index matches into rows for the explorer's search panel.
  *
- * Order is the contract here: `/api/file-index` already ranks matches (exact
+ * Order is the contract here: `/api/workspace/index` already ranks matches (exact
  * name, then name prefix, then name substring, then path substring, then
  * subsequence), so the panel must render them in exactly that order. Folding
  * results into a directory tree would re-sort them alphabetically and bury the

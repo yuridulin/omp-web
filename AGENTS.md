@@ -15,14 +15,18 @@ day-to-day repository rules.
   external consumers; `lib/` and `server/` import concrete core modules.
 - `lib/` — Bun-only adapters: `omp` binary probing and NDJSON transport,
   session file IO, config files, usage reports, media, notifications, skills,
-  STT. `lib/` and `server/` may import `core/`; `core/` never imports them.
-- `server/` — `Bun.serve` server + filesystem router. `server/routes/**` are
-  the old API handlers; they must import `../../http` (the NextResponse /
-  NextRequest shim), never `next/server`. `server/index.ts` runs under Bun and
-  loads route TypeScript directly.
-- `contract/` — generated `open-api.yaml` and the SSE event description. Never
-  hand-edit the generated spec: it is produced from the route schemas and
-  committed with the code that changes it.
+  STT, PTY terminals, and the project file watcher. The live-session authority
+  (`session-authority.ts`) owns one `core/machine.ts` per omp wrapper. `lib/`
+  and `server/` may import `core/`; `core/` never imports them.
+- `server/` — `Bun.serve` server + filesystem router. `server/routes/**` export
+  a `contract` next to their handlers (request schemas validate in
+  `dispatch`); they use `json()` / `readJson()` from `server/http.ts` and
+  native `Request` / `Response`. `server/index.ts` runs under Bun, loads route
+  TypeScript directly, and serves the terminal WebSocket.
+- `contract/` — generated `open-api.yaml` (from `bun run contract`) and
+  `events.md` for the SSE channels and terminal frames. Never hand-edit the
+  generated spec: it is produced from the route contracts and committed with
+  the code that changes it; CI runs `bun run contract:check`.
 - `web/` — the UI (M3). A classic frontend: HTTP only, types derived from
   `contract/open-api.yaml`. It must not import from `core/`, `lib/` or
   `server/`.

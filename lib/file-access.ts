@@ -73,7 +73,7 @@ export function getConfigAgentRoots(): string[] {
  * can carry an `apiKey` for custom models, so making the config root readable
  * to view a rule file would also hand out secrets over `?type=download`. Both
  * are already reachable through their purpose-built routes
- * (`app/api/auth/api-key/*`, `app/api/models-config/route.ts`) which redact or
+ * (`app/api/auth/api-key/*`, `app/api/system/models-config/route.ts`) which redact or
  * scope what they return, so nothing legitimate needs the generic path.
  */
 const CONFIG_ROOT_DENIED_FILES: ReadonlySet<string> = new Set(["agent.db", "models.yml"]);
@@ -128,7 +128,7 @@ export function isPathWithinRoots(target: string, roots: Set<string>): boolean {
 
 export const isFilePathAllowed = isPathWithinRoots;
 
-/** An /api/files request path is absolute when it is a posix `/…` root, a
+/** An /api/workspace/files request path is absolute when it is a posix `/…` root, a
  *  Windows drive `C:/…` path, or a UNC `//server/share…` path. Everything else
  *  is relative and only becomes meaningful once resolved against a root. */
 export function isAbsoluteFileRequestPath(filePath: string): boolean {
@@ -137,10 +137,10 @@ export function isAbsoluteFileRequestPath(filePath: string): boolean {
 }
 
 /**
- * Resolve a *relative* /api/files request path against the allowed roots.
+ * Resolve a *relative* /api/workspace/files request path against the allowed roots.
  *
  * `components/MarkdownBody.tsx` linkifies bare workspace paths (`package.json`,
- * `src/foo.ts`) into `/api/files/<encoded>?type=read`, but the catch-all param
+ * `src/foo.ts`) into `/api/workspace/files/<encoded>?type=read`, but the catch-all param
  * carries no leading slash, so the route read those as `/package.json` — a path
  * at the filesystem root, in no allowed root, and a 403 (#135).
  *

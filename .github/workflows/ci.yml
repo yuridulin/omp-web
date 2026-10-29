@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: sudo apt-get update && sudo apt-get install -y build-essential python3
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run contract:check
+      - run: bun test

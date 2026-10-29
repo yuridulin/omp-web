@@ -17,8 +17,8 @@ core/   pure TypeScript: no React, DOM, fetch, storage, timers or Node imports
         and lists, history paging, RPC framing, routing
 lib/    Bun host layer: omp process + NDJSON transport, session file IO,
         model/MCP/settings config, usage, media, notifications, skills, STT
-server/ Bun.serve server; routes are the former Next.js handlers with
-        next/server replaced by server/http.ts (NextResponse.json/NextRequest)
+server/ Bun.serve server; handlers use server/http.ts helpers (json,
+        readJson) and native Request/Response
 ```
 
 `core/types.ts` and `core/pi-types.ts` hold the shared omp shapes. `core/index.ts`
@@ -31,17 +31,28 @@ bun start                 # http://127.0.0.1:30178
 OMP_WEB_HOST=0.0.0.0 OMP_WEB_PORT=8080 bun start
 ```
 
-Endpoints include `/api/sessions*`, `/api/agent/*`, `/api/events` (multiplexed
-SSE), `/api/files/*`, `/api/git/*`, `/api/worktrees`, `/api/projects*`,
-`/api/models*`, `/api/mcp`, `/api/skills`, `/api/notifications/*`, `/api/stt*`
-and `/api/media/*`. The server binds loopback by default and has no password
-gate; put it behind a reverse proxy if it is exposed.
+Endpoints are grouped by domain:
+
+- `/api/agent/*` — sessions, history, intents, live events, agent definitions,
+  plugins;
+- `/api/workspace/*` — files (read/write/rename/delete/upload), index, git
+  (status/diff/stage/commit/branches/checkout), worktrees, projects, media,
+  cwd, and the terminal WebSocket;
+- `/api/system/*` — models, providers, auth, settings, usage, notifications,
+  STT, skills, MCP, updates.
+
+The server binds loopback by default and has no password gate; put it behind a
+reverse proxy if it is exposed. The generated contract is
+`contract/open-api.yaml`; live-event and terminal frames are described in
+`contract/events.md`.
 
 ## Development
 
 ```
 bun test            # bun:test, no build step
 bun run typecheck   # tsc --noEmit
+bun run contract    # regenerate contract/open-api.yaml from route contracts
+bun run contract:check
 ```
 
 Requires Bun 1.4.4+.

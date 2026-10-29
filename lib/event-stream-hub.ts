@@ -1,10 +1,13 @@
 import { randomUUID } from "crypto";
 import fs from "fs";
 import { authorizeFileAccess } from "./file-authorization";
+import { getAllowedFileRoots, isExistingFilePathAllowed } from "./file-access";
 import { filePathApiSegments } from "./file-paths";
 import { attachNotificationClient } from "./notification-hub";
 import { getExitedRpcSessions, getRpcSession, getRunningRpcSessions, subscribeHostToolCalls, subscribeRunningSessions } from "./rpc-manager";
+import { authorityFor, snapshotFrame } from "./session-authority";
 import { subscribeSessionFileChanges } from "./session-watcher";
+import { watchWorkspace } from "./workspace-watcher";
 import {
   MUX_CONTROL_EVENT,
   UNKNOWN_CONNECTION_CODE,
@@ -13,7 +16,7 @@ import {
 } from "./event-stream-protocol";
 
 // Server half of the multiplexed live-event stream (see event-stream-protocol).
-// One EventStreamConnection = one `/api/events` SSE response = one browser
+// One EventStreamConnection = one `/api/agent/events` SSE response = one browser
 // socket, carrying any number of channel subscriptions for every tab behind
 // the browser's shared worker.
 
@@ -212,7 +215,8 @@ export class EventStreamConnection {
     const desiredSize = this.controller?.desiredSize ?? null;
     if (
       subscription.coalescesMessageUpdates
-      && (data as { type?: unknown } | null)?.type === "message_update"
+      && ((data as { type?: unknown } | null)?.type === "message_update"
+        || (data as { type?: unknown } | null)?.type === "snapshot")
       && desiredSize !== null
       && desiredSize < 0
     ) {
@@ -232,6 +236,8 @@ async function openChannel(channel: EventStreamChannel, handle: SubscriptionHand
       return openNotificationsChannel(channel.clientId, handle);
     case "session":
       return openSessionChannel(channel.sessionId, handle);
+    case "workspace":
+      return openWorkspaceChannel(channel.root, handle);
     case "file":
       return openFileChannel(channel.path, channel.sessionId, handle);
     case "host-tools":
@@ -286,20 +292,45 @@ function openHostToolsChannel(handle: SubscriptionHandle): SubscribeResult {
   return SUBSCRIBED;
 }
 
+// Recursive file changes under one authorized workspace root.
+async function openWorkspaceChannel(root: string, handle: SubscriptionHandle): Promise<SubscribeResult> {
+  const roots = await getAllowedFileRoots();
+  if (!isExistingFilePathAllowed(root, roots)) {
+    return { ok: false, status: 403, error: "Workspace is not allowed", code: "access_denied" };
+  }
+  handle.open();
+  handle.setDetach(watchWorkspace(root, (change) => handle.send({ type: "workspace-changed", ...change })));
+  return SUBSCRIBED;
+}
+
 // Agent events of one live omp wrapper.
 function openSessionChannel(sessionId: string, handle: SubscriptionHandle): SubscribeResult {
   // Observer-only: opening a saved session must not create another omp
   // process for a terminal-owned session. Explicit commands use
-  // POST /api/agent/[id], which starts the wrapper before this attaches.
+  // POST /api/agent/sessions/[id]/command, which starts the wrapper first.
   const existing = getRpcSession(sessionId);
   const session = existing?.isAlive() ? existing : undefined;
   if (!session) return { ok: false, status: 409, error: "Session is not managed by omp-web", code: "session_not_managed" };
 
+  const authority = authorityFor(session);
   handle.open();
   // onEvent can synchronously replay pending UI requests. Subscribe before
   // sampling the cursor/announcing readiness so catch-up has no event gap.
-  handle.setDetach(session.onEvent((event) => handle.send(event)));
+  const detachFrames = session.onEvent((event) => handle.send(event));
+  let lastRevision = -1;
+  const detachSnapshots = authority.subscribe((snapshot) => {
+    const includeHistory = snapshot.session.historyRevision !== lastRevision;
+    lastRevision = snapshot.session.historyRevision;
+    handle.send(snapshotFrame(snapshot, includeHistory));
+  });
+  handle.setDetach(() => {
+    detachFrames();
+    detachSnapshots();
+  });
   handle.send({ type: "connected", sessionId, web: session.getStreamSnapshot().cursor });
+  const initial = authority.snapshot;
+  lastRevision = initial.session.historyRevision;
+  handle.send(snapshotFrame(initial, true));
   return SUBSCRIBED;
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "bun:test";
 
-const { toFrame, isLocalIntent } = await import("./commands.ts");
+const { toFrame, isLocalIntent, parseChatIntent } = await import("./commands.ts");
 const { applyRecovery, isDraftEmpty, parseDraft, serializeDraft, draftKeysToEvict, mergeRecoveredText, EMPTY_DRAFT } = await import("./drafts.ts");
 const { branchReducer, initialBranching, isHistoryBusy, canBeginEdit, canBeginFork } = await import("./branching.ts");
 
@@ -112,4 +112,68 @@ test("settling a fork clears only the fork gate", () => {
   assert.equal(selected.leafId, "leaf-2");
   const settled = branchReducer(selected, { type: "fork-settled" });
   assert.deepEqual(settled, { editingEntryId: null, forkingEntryId: null, leafId: "leaf-2" });
+});
+
+test("parseChatIntent accepts every intent kind and drops unknown fields", () => {
+  const cases = [
+    { kind: "prompt", text: "hi" },
+    { kind: "prompt", text: "hi", images: [{ data: "x", mimeType: "image/png" }] },
+    { kind: "steer", text: "go" },
+    { kind: "follow-up", text: "later" },
+    { kind: "abort" },
+    { kind: "abort-compaction" },
+    { kind: "compact", instructions: "keep it" },
+    { kind: "queue-remove", queue: "followUp", text: "a" },
+    { kind: "queue-promote", text: "b" },
+    { kind: "edit-entry", entryId: "e1", text: "new" },
+    { kind: "fork-entry", entryId: "e2", withEdits: false },
+    { kind: "navigate-leaf", leafId: null },
+    { kind: "navigate-leaf", leafId: "l1" },
+    { kind: "toggle-pre-compaction" },
+    { kind: "select-model", provider: "p", modelId: "m" },
+    { kind: "set-thinking", level: "high" },
+    { kind: "set-fast-mode", enabled: true },
+    { kind: "set-slow-mode", enabled: false },
+    { kind: "set-auto-compaction", enabled: true },
+    { kind: "set-interrupt-mode", mode: "wait" },
+    { kind: "set-streaming-mode", mode: "followUp" },
+    { kind: "set-session-name", name: "Refactor" },
+    { kind: "extension-response", requestId: "r1", response: { ok: true } },
+    { kind: "draft-edit", patch: { text: "draft" } },
+    { kind: "draft-clear" },
+    { kind: "refresh-state" },
+  ];
+  for (const intent of cases) {
+    assert.deepEqual(parseChatIntent(intent), intent, `intent ${intent.kind}`);
+  }
+  assert.deepEqual(
+    parseChatIntent({ kind: "abort", extra: true }),
+    { kind: "abort" },
+    "unknown fields are not forwarded",
+  );
+});
+
+test("parseChatIntent rejects malformed intents", () => {
+  for (const value of [
+    null,
+    {},
+    { kind: "nope" },
+    { kind: 42 },
+    { kind: "prompt" },
+    { kind: "prompt", text: 1 },
+    { kind: "prompt", text: "hi", images: "x" },
+    { kind: "steer" },
+    { kind: "queue-remove", queue: "other", text: "a" },
+    { kind: "fork-entry", entryId: "e", withEdits: "yes" },
+    { kind: "navigate-leaf", leafId: 5 },
+    { kind: "set-thinking", level: "extreme" },
+    { kind: "set-fast-mode", enabled: 1 },
+    { kind: "set-streaming-mode", mode: "queue" },
+    { kind: "extension-response", requestId: "r", response: [] },
+    { kind: "draft-edit", patch: { text: 1 } },
+    { kind: "draft-edit", patch: { images: [{ data: "x" }] } },
+    { kind: "draft-edit", patch: { files: [{ name: "a" }] } },
+  ]) {
+    assert.equal(parseChatIntent(value), null, JSON.stringify(value));
+  }
 });

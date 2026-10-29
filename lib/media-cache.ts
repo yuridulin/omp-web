@@ -5,7 +5,7 @@ import { getBlobsDir, getDiagnosticsDir } from "./omp/paths";
 import { isRecord } from "./type-guards";
 
 /**
- * Tool-result images reach the browser as `/api/media/<sha256>` URLs instead of
+ * Tool-result images reach the browser as `/api/workspace/media/<sha256>` URLs instead of
  * inline base64, so big screenshots never sit in the chat's React state. The
  * hash is omp's own blob address (sha256 of the image bytes): history entries
  * already carry it as `blob:sha256:<hash>`, and live output is hashed here and
@@ -124,7 +124,7 @@ function imageBlockAsUrl(block: unknown): unknown {
       return block; // Disk trouble: keep showing the inline image.
     }
   }
-  return { type: "image", ...(typeof mimeType === "string" ? { mimeType } : {}), url: `/api/media/${hash}` };
+  return { type: "image", ...(typeof mimeType === "string" ? { mimeType } : {}), url: `/api/workspace/media/${hash}` };
 }
 
 /** Tool-result content with every image replaced by a media URL. */

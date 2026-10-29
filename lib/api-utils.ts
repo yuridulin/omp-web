@@ -12,7 +12,7 @@ export async function resolveSessionPathOr404(
   return { filePath };
 }
 
-/** JSON body `{ error: string }` for an API failure. The caller sets the status. */
-export function apiErrorBody(error: unknown): { error: string } {
-  return { error: String(error) };
+/** JSON body for an API failure: the one `{ error, code }` envelope. */
+export function apiErrorBody(error: unknown, code = "internal_error"): { error: string; code: string } {
+  return { error: String(error), code };
 }

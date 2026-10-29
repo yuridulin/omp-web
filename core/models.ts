@@ -1,9 +1,9 @@
 /**
- * The `/api/models` catalog, in framework-free form.
+ * The `/api/system/models` catalog, in framework-free form.
  *
  * The API bakes omp's model metadata per entry: the thinking ladder is already
  * resolved to `["off", ...efforts]` for reasoning models and `["off"]`
- * otherwise. The core never calls `/api/models`; a host parses the payload here
+ * otherwise. The core never calls `/api/system/models`; a host parses the payload here
  * and hands the result around as plain data.
  */
 
@@ -90,13 +90,13 @@ function parseEntry(value: unknown): ModelEntry | null {
 function parseDefaultModel(value: unknown): ModelRef | null {
   if (!isRecord(value)) return null;
   const provider = asNonEmptyString(value.provider);
-  // `/api/models` reports `modelId`; session files and live state use `id`.
+  // `/api/system/models` reports `modelId`; session files and live state use `id`.
   const modelId = asNonEmptyString(value.modelId) ?? asNonEmptyString(value.id);
   if (provider === undefined || modelId === undefined) return null;
   return { provider, modelId };
 }
 
-/** Parse the `/api/models` body. Total: any input yields a valid catalog. */
+/** Parse the `/api/system/models` body. Total: any input yields a valid catalog. */
 export function parseModelCatalog(payload: unknown): ModelCatalog {
   if (!isRecord(payload)) return { entries: [], defaultModel: null };
 

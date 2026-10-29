@@ -5,7 +5,7 @@ export function normalizeFilePathSlashes(filePath: string): string {
   return filePath;
 }
 
-/** The decoded catch-all segments `/api/files/[...path]` receives for a path.
+/** The decoded catch-all segments `/api/workspace/files/[...path]` receives for a path.
  * The live file-watch channel sends the raw path instead of a URL, and the
  * server rebuilds it from these same segments so both resolve identically. */
 export function filePathApiSegments(filePath: string): string[] {

@@ -14,7 +14,7 @@ import {
 } from "./file-access";
 import { isFilePathReferencedBySession } from "./session-file-references";
 
-/** Rebuild an absolute path from `/api/files/[...path]` catch-all segments. */
+/** Rebuild an absolute path from `/api/workspace/files/[...path]` catch-all segments. */
 export function filePathFromSegments(segments: string[]): string {
   const joined = segments.join("/");
   const slashJoined = normalizeSlashes(joined);
@@ -48,7 +48,7 @@ export type FileAccessDecision =
 const ACCESS_DENIED: FileAccessDecision = { ok: false, status: 403, error: "Access denied", code: "access_denied" };
 
 /**
- * The single allow-list gate for reading workspace files (`/api/files` and the
+ * The single allow-list gate for reading workspace files (`/api/workspace/files` and the
  * live file-watch channel): resolves the requested catch-all segments, then
  * admits the path when it is inside an allowed root, or — when
  * `allowSessionReference` — referenced by the given session's transcript.

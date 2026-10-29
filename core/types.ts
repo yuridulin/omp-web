@@ -37,7 +37,7 @@ export interface TextContent {
  * Image block. omp persists the flat {data, mimeType} shape (data may be a
  * `blob:sha256:` reference until resolved); legacy pi entries used the nested
  * Anthropic-style `source` shape. The UI handles both. Tool-result images
- * reach the browser as `url` (`/api/media/<sha256>`, `?thumb=1` for a small
+ * reach the browser as `url` (`/api/workspace/media/<sha256>`, `?thumb=1` for a small
  * preview) instead of inline base64.
  */
 export interface ImageContent {

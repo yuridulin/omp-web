@@ -219,6 +219,9 @@ interface IdentityChangeOptions {
 
 export class AgentSessionWrapper {
   private listeners: EventListener[] = [];
+  /** Server-side observers (the core authority). They never count as a UI
+   *  attachment: subscribing to them must not keep the child from reaping. */
+  private frameObservers = new Set<EventListener>();
   private pendingUiRequests = new Map<string, UnsequencedAgentEvent>();
   private uiExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private extensionStatuses = new Map<string, string>();
@@ -935,6 +938,13 @@ export class AgentSessionWrapper {
         // notifyRunningChange apply to their listener sets.
       }
     }
+    for (const l of this.frameObservers) {
+      try {
+        l(event as AgentEvent);
+      } catch {
+        // An internal observer must never break the frame fanout.
+      }
+    }
   }
 
   private sessionFileSignalTimer: NodeJS.Timeout | null = null;
@@ -1013,6 +1023,14 @@ export class AgentSessionWrapper {
 
   onDestroy(cb: () => void): void {
     this.onDestroyCallback = cb;
+  }
+
+  /** Observe every live frame without registering as a UI attachment. */
+  onFrame(listener: EventListener): () => void {
+    this.frameObservers.add(listener);
+    return () => {
+      this.frameObservers.delete(listener);
+    };
   }
 
   /**

@@ -1,5 +1,5 @@
 /**
- * Wire contract for the multiplexed live-event stream (`/api/events`).
+ * Wire contract for the multiplexed live-event stream (`/api/agent/events`).
  *
  * Browsers cap HTTP/1.1 at six connections per host across ALL tabs, and every
  * long-lived SSE response pins one. The client therefore holds a single stream
@@ -14,7 +14,7 @@
 
 import { isValidNotificationId } from "./notifications";
 
-export const EVENT_STREAM_PATH = "/api/events";
+export const EVENT_STREAM_PATH = "/api/agent/events";
 export const MUX_CONTROL_EVENT = "mux";
 /** Subscription ids double as SSE event names: no whitespace, never "mux"/"message". */
 export const SUBSCRIPTION_ID_RE = /^s[0-9]{1,15}$/;
@@ -26,6 +26,8 @@ export type EventStreamChannel =
   | { kind: "notifications"; clientId: string }
   | { kind: "session"; sessionId: string }
   | { kind: "file"; path: string; sessionId: string | null }
+  /** Recursive file changes under one authorized workspace root. */
+  | { kind: "workspace"; root: string }
   /** Host tool calls (open_url, notify, open_file) from sessions no tab is watching. */
   | { kind: "host-tools" };
 
@@ -57,6 +59,8 @@ export function parseEventStreamChannel(value: unknown): EventStreamChannel | nu
       return { kind: "host-tools" };
     case "session":
       return isBoundedString(channel.sessionId, MAX_ID_LENGTH) ? { kind: "session", sessionId: channel.sessionId } : null;
+    case "workspace":
+      return isBoundedString(channel.root, MAX_PATH_LENGTH) ? { kind: "workspace", root: channel.root } : null;
     case "file": {
       if (!isBoundedString(channel.path, MAX_PATH_LENGTH)) return null;
       const sessionId = channel.sessionId ?? null;
