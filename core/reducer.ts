@@ -199,7 +199,6 @@ function applyFrame(state: SessionState, frame: WireEvent, at: number): SessionS
     case "agent_end": {
       if (!isTerminalAgentEnd(frame)) return next;
       const error = readTerminalAgentError(frame) ?? next.run.error;
-      const silent = !next.run.hadContent && !error;
       const withNotice = error ? pushNotice(next, noticeFor(next, "error", error, at)) : next;
       return {
         ...withNotice,
@@ -207,9 +206,10 @@ function applyFrame(state: SessionState, frame: WireEvent, at: number): SessionS
         stream: { ...withNotice.stream, active: false },
         toolResults: {},
         lastError: error ?? withNotice.lastError,
-        // A run that ended without visible output may still have written to the
-        // session file (resume, compaction): re-read instead of asserting empty.
-        historyRevision: silent ? withNotice.historyRevision + 1 : withNotice.historyRevision,
+        // The wrapper clears live output before handing us agent_end, and the
+        // committed messages only exist in the session file. Re-read on every
+        // terminal run, not just silent ones, or the transcript stays empty.
+        historyRevision: withNotice.historyRevision + 1,
       };
     }
 

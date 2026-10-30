@@ -318,10 +318,24 @@ async function openSessionChannel(sessionId: string, handle: SubscriptionHandle)
   // sampling the cursor/announcing readiness so catch-up has no event gap.
   const detachFrames = session.onEvent((event) => handle.send(event));
   let lastRevision = -1;
+  let historySend: Promise<void> = Promise.resolve();
   const detachSnapshots = authority.subscribe((snapshot) => {
-    const includeHistory = snapshot.session.historyRevision !== lastRevision;
-    lastRevision = snapshot.session.historyRevision;
-    handle.send(snapshotFrame(snapshot, includeHistory));
+    const revision = snapshot.session.historyRevision;
+    if (revision === lastRevision) {
+      handle.send(snapshotFrame(snapshot, false));
+      return;
+    }
+    // A revision change only marks the transcript dirty; the authority loads
+    // it asynchronously. Sending the empty snapshot now would mark the
+    // revision as delivered, and the load completion would then be treated as
+    // a delta without messages. Hold the history frame until the load lands.
+    lastRevision = revision;
+    historySend = historySend.then(async () => {
+      await authority.refreshHistory();
+      const current = authority.snapshot;
+      if (current.session.historyRevision !== revision) return;
+      handle.send(snapshotFrame(current, true));
+    }).catch(() => {});
   });
   handle.setDetach(() => {
     detachFrames();

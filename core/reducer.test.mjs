@@ -140,7 +140,8 @@ test("a silent terminal run asks for a history re-read instead of asserting an e
   assert.ok(state.historyRevision >= 2, "history must be re-read");
 });
 
-test("a terminal run with visible output does not re-read history", () => {
+test("a terminal run with visible output re-reads the committed history", () => {
+  const before = streamingState().historyRevision;
   const state = run(streamingState(), [
     { type: "frame", at: 1001, frame: frame("message_update", { message: { role: "assistant", content: [{ type: "text", text: "done" }] } }, 2) },
     { type: "frame", at: 1002, frame: frame("agent_end", {}, 3) },
@@ -148,6 +149,7 @@ test("a terminal run with visible output does not re-read history", () => {
   assert.equal(state.run.status, "idle");
   assert.equal(state.run.hadContent, true);
   assert.equal(state.notices.length, 0);
+  assert.ok(state.historyRevision > before, "the transcript must come from the session file after live output is cleared");
 });
 
 test("a terminal error surfaces as a notice and as run state", () => {

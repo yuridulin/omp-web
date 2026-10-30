@@ -193,8 +193,12 @@ export class SessionAuthority {
         history = null;
       }
       if (this.#disposed) return;
+      // A missing/unreadable file is transient (a brand-new session is not
+      // written yet). Leave the revision dirty so the next refresh retries
+      // instead of marking an empty transcript as loaded.
+      if (!history) break;
       this.#loadedRevision = revision;
-      if (history) this.#machine.applyHistory(history.messages, history.entryIds);
+      this.#machine.applyHistory(history.messages, history.entryIds);
     }
   }
 }
