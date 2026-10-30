@@ -86,6 +86,65 @@ test("writes outside every allowed root are refused", async () => {
   }
 });
 
+test("lsp document routes validate the body, root and path", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "omp-lsp-routes-"));
+  allowFileRoot(dir);
+  try {
+    const malformed = await call("/api/workspace/lsp/documents", "POST", { action: "nope" });
+    assert.equal(malformed.status, 400);
+    assert.equal(malformed.body.code, "invalid_request");
+
+    const outside = await call("/api/workspace/lsp/documents", "POST", {
+      action: "open",
+      root: dir,
+      path: join(dirname(process.cwd()), "outside.ts"),
+      languageId: "typescript",
+      text: "const x = 1;\n",
+    });
+    assert.equal(outside.status, 403);
+    assert.equal(outside.body.code, "access_denied");
+
+    const unsupported = await call("/api/workspace/lsp/documents", "POST", {
+      action: "open",
+      root: dir,
+      path: join(dir, "notes.txt"),
+      languageId: "plaintext",
+      text: "hello\n",
+    });
+    assert.equal(unsupported.status, 200);
+    assert.deepEqual(unsupported.body, { ok: false, reason: "unsupported_language" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("lsp diagnostics routes authorize the root and return an empty snapshot", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "omp-lsp-diagnostics-"));
+  allowFileRoot(dir);
+  const filePath = join(dir, "a.ts");
+  try {
+    const denied = await call(
+      `/api/workspace/lsp/diagnostics?root=${encodeURIComponent(dirname(process.cwd()))}&path=${encodeURIComponent(filePath)}`,
+      "GET",
+    );
+    assert.equal(denied.status, 403);
+
+    const snapshot = await call(
+      `/api/workspace/lsp/diagnostics?root=${encodeURIComponent(dir)}&path=${encodeURIComponent(filePath)}`,
+      "GET",
+    );
+    assert.equal(snapshot.status, 200);
+    assert.deepEqual(snapshot.body, {
+      available: false,
+      server: null,
+      version: null,
+      diagnostics: [],
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test("the generated route table exposes the domain paths", () => {
   const paths = routes.map((route) => `/${route.segments.join("/")}`);
   assert.ok(paths.includes("/agent/sessions/[id]/intent"));

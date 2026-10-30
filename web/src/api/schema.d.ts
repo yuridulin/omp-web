@@ -424,7 +424,7 @@ export interface paths {
                             id: string;
                             channel: {
                                 /** @enum {string} */
-                                kind: "running" | "notifications" | "session" | "file" | "workspace" | "host-tools";
+                                kind: "running" | "notifications" | "session" | "file" | "workspace" | "lsp" | "host-tools";
                                 clientId?: string;
                                 sessionId?: string;
                                 path?: string;
@@ -7293,6 +7293,18 @@ export interface paths {
                             agentEnv: {
                                 [key: string]: string;
                             };
+                            lsp: {
+                                enabled: boolean;
+                                servers: {
+                                    id: string;
+                                    languages: string[];
+                                    command: string;
+                                    args: string[];
+                                    env?: {
+                                        [key: string]: string;
+                                    };
+                                }[];
+                            };
                         } & {
                             [key: string]: unknown;
                         };
@@ -7325,6 +7337,18 @@ export interface paths {
                         agentEnv?: string | {
                             [key: string]: unknown;
                         };
+                        lsp?: {
+                            enabled: boolean;
+                            servers: {
+                                id: string;
+                                languages: string[];
+                                command: string;
+                                args: string[];
+                                env?: {
+                                    [key: string]: string;
+                                };
+                            }[];
+                        };
                     } & {
                         [key: string]: unknown;
                     };
@@ -7342,6 +7366,18 @@ export interface paths {
                             agentToolsEnabled: boolean;
                             agentEnv: {
                                 [key: string]: string;
+                            };
+                            lsp: {
+                                enabled: boolean;
+                                servers: {
+                                    id: string;
+                                    languages: string[];
+                                    command: string;
+                                    args: string[];
+                                    env?: {
+                                        [key: string]: string;
+                                    };
+                                }[];
                             };
                         } & {
                             [key: string]: unknown;
@@ -9278,6 +9314,268 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace/lsp/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the diagnostics published for one workspace document */
+        get: {
+            parameters: {
+                query: {
+                    path: string;
+                    root: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            available: boolean;
+                            server: string | null;
+                            version: number | null;
+                            diagnostics: {
+                                range: {
+                                    start: {
+                                        line: number;
+                                        character: number;
+                                    };
+                                    end: {
+                                        line: number;
+                                        character: number;
+                                    };
+                                };
+                                severity?: 1 | 2 | 3 | 4;
+                                code?: string | number;
+                                source?: string;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Error */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace/lsp/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open, change or close one workspace document in its language server */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        action: "open";
+                        root: string;
+                        path: string;
+                        languageId?: string;
+                        text: string;
+                    } | {
+                        /** @constant */
+                        action: "change";
+                        root: string;
+                        path: string;
+                        text: string;
+                    } | {
+                        /** @constant */
+                        action: "close";
+                        root: string;
+                        path: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @constant */
+                            ok: true;
+                            server: string;
+                            version: number;
+                        } | {
+                            /** @constant */
+                            ok: true;
+                        } | {
+                            /** @constant */
+                            ok: false;
+                            /** @enum {string} */
+                            reason: "disabled" | "unsupported_language" | "missing_server" | "server_failed" | "document_limit" | "root_limit" | "document_not_open";
+                            hint?: string;
+                            error?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Payload Too Large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            code: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Error */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;

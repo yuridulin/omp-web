@@ -14,9 +14,13 @@ the UI never imports `core/`, `lib/` or `server/`.
   `sortOrder`; sessions are grouped by `projectRoot` (worktree-aware).
 - The chat renders the authoritative session snapshot, falling back to
   `/api/agent/sessions/{id}/context` for saved sessions without a live stream.
-- The workbench is scoped to the selected session: `Files` and `Changes`.
-  Files open as preview tabs on click and pinned tabs on double click. Changes
-  open the before/after diff for working-tree, index, or untracked states.
+- The workbench is scoped to the selected session: `Files`, `Changes`, and
+  `Problems`. Files open as preview tabs on click and pinned tabs on double
+  click. Changes open the before/after diff for working-tree, index, or
+  untracked states.
+- A session starts with its workspace root; the `+` button adds any registered
+  project as another root. Each root has its own tree, git count, and terminal
+  button; removing a non-primary root closes the tabs that only lived under it.
 - Dividers resize the rail, workbench, and file navigator. Widths and
   collapsed flags persist in `omp.layout.v1`; tabs, expanded directories,
   view and scroll persist per session in `omp.workbench.v1.<sessionId>`.
@@ -32,6 +36,13 @@ the UI never imports `core/`, `lib/` or `server/`.
   file or directory closes its open tabs and drops their drafts.
 - Changes offers stage, unstage, commit, and branch actions for the working
   tree; diffs open as read-only before/after tabs.
+- Language servers publish diagnostics for open files into Monaco markers and
+  the `Problems` view. `Settings` → `Language servers` enables them, edits the
+  JSON server definitions, and lists the built-in TypeScript and C# presets.
+- `Ctrl`/`Cmd`+`K` over a selection (or the current line) opens the inline-edit
+  bar; the instruction becomes a scoped prompt in the active chat session, so
+  the agent makes the edit through its normal tools and the diff appears under
+  `Changes`.
 - The header's `>_` button opens (or activates) the session's terminal tab for
   the workspace root. Every terminal tab stays mounted with its PTY while you
   switch to other tabs, so shells keep running; closing the tab closes its
@@ -111,6 +122,7 @@ the UI never imports `core/`, `lib/` or `server/`.
 | Live turn state | SSE `{ kind: "running" }` |
 | Session state | SSE `{ kind: "session", sessionId }` |
 | File invalidations | SSE `{ kind: "workspace", root }` |
+| Diagnostics | SSE `{ kind: "lsp", root }`, `/api/workspace/lsp/diagnostics` |
 | File tree / content | `/api/workspace/files/{path}?type=list|read` |
 | Git changes | `/api/workspace/git/status`, `/api/workspace/git/file` |
 

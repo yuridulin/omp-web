@@ -67,3 +67,35 @@ export function comparablePath(value: string): string {
   const normalized = normalizeSlashes(value).replace(/\/{2,}/g, "/").replace(/\/+$/, "");
   return isWindowsForm(normalized) ? normalized.toLowerCase() : normalized;
 }
+
+/** Comparable base that keeps a filesystem root (`/`, `C:/`) usable as a prefix. */
+function comparableBase(value: string): string {
+  const normalized = normalizeSlashes(value);
+  if (normalized === "/") return "/";
+  const key = comparablePath(normalized);
+  return /^[a-z]:$/.test(key) ? `${key}/` : key;
+}
+
+/** True when `filePath` is `root` or lives under it (case-insensitive on Windows). */
+export function isPathWithin(filePath: string, root: string): boolean {
+  const file = comparablePath(filePath);
+  const base = comparableBase(root);
+  if (!base) return false;
+  if (file === base) return true;
+  return file.startsWith(base.endsWith("/") ? base : `${base}/`);
+}
+
+/** The most specific root containing `filePath`, or null. */
+export function rootForPath(roots: readonly string[], filePath: string): string | null {
+  let best: string | null = null;
+  let bestLength = -1;
+  for (const root of roots) {
+    if (!isPathWithin(filePath, root)) continue;
+    const length = comparableBase(root).length;
+    if (length > bestLength) {
+      best = root;
+      bestLength = length;
+    }
+  }
+  return best;
+}

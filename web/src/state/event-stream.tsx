@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { useQueryClient } from "@tanstack/react-query";
 import { EventStreamClient, type Channel, type FrameHandler } from "@/api/events";
 import { applyExtensionFrame } from "./extension-store";
+import { applyLspDiagnosticsFrame } from "./lsp-store";
 import { applySnapshotFrame, isSnapshotFrame } from "./session-store";
 
 const EventStreamContext = createContext<EventStreamClient | null>(null);
@@ -28,6 +29,7 @@ function channelKey(channel: Channel): string {
     case "running": return "running";
     case "session": return `session:${channel.sessionId}`;
     case "workspace": return `workspace:${channel.root}`;
+    case "lsp": return `lsp:${channel.root}`;
     case "file": return `file:${channel.path}:${channel.sessionId ?? ""}`;
     case "notifications": return `notifications:${channel.clientId}`;
     case "host-tools": return "host-tools";
@@ -105,13 +107,46 @@ export function useSessionStream(sessionId: string | null, revision = 0): { erro
   return { error };
 }
 
-export function useWorkspaceEvents(root: string | null): void {
+export function useWorkspaceEvents(roots: readonly string[]): void {
+  const client = useEventStream();
   const queryClient = useQueryClient();
-  useChannel(root ? { kind: "workspace", root } : null, (frame) => {
-    if (frame.type !== "workspace-changed") return;
-    void queryClient.invalidateQueries({ queryKey: ["file-list"] });
-    void queryClient.invalidateQueries({ queryKey: ["file-content"] });
-    void queryClient.invalidateQueries({ queryKey: ["git-status", root] });
-    void queryClient.invalidateQueries({ queryKey: ["git-file"] });
-  });
+  const key = roots.join("\n");
+
+  useEffect(() => {
+    if (!client || roots.length === 0) return;
+    let cancelled = false;
+    const detach: Array<() => void> = [];
+    for (const root of roots) {
+      void client
+        .subscribe({ kind: "workspace", root }, (frame) => {
+          if (frame.type !== "workspace-changed") return;
+          void queryClient.invalidateQueries({ queryKey: ["file-list"] });
+          void queryClient.invalidateQueries({ queryKey: ["file-content"] });
+          void queryClient.invalidateQueries({ queryKey: ["git-status"] });
+          void queryClient.invalidateQueries({ queryKey: ["git-file"] });
+        })
+        .then((unsubscribe) => {
+          if (cancelled) unsubscribe();
+          else detach.push(unsubscribe);
+        })
+        .catch(() => {
+          // A denied/closed root just stops delivering changes.
+        });
+      void client
+        .subscribe({ kind: "lsp", root }, (frame) => applyLspDiagnosticsFrame(frame))
+        .then((unsubscribe) => {
+          if (cancelled) unsubscribe();
+          else detach.push(unsubscribe);
+        })
+        .catch(() => {
+          // Diagnostics are best-effort; the HTTP snapshot still seeds the store.
+        });
+    }
+    return () => {
+      cancelled = true;
+      for (const unsubscribe of detach) unsubscribe();
+    };
+    // `key` captures the root set without depending on array identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, key, queryClient]);
 }

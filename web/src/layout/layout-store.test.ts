@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  addWorkbenchRoot,
   closeTab,
   closeTabsForPath,
   diffTabId,
   diffTabTitle,
-  ensureWorkbenchRoot,
+  ensureWorkbenchRoots,
   fileTabId,
   getLayout,
   getWorkbenchContext,
   openDiffTab,
   openFileTab,
   openTerminalTab,
+  removeWorkbenchRoot,
   renameFileTabs,
   resetLayoutForTests,
   setActiveTab,
@@ -37,7 +39,7 @@ describe("layout store", () => {
   });
 
   it("keeps file tabs per session and replaces previews", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     openFileTab("s1", "D:/repo/a.ts", true);
     openFileTab("s1", "D:/repo/b.ts", true);
     let context = getWorkbenchContext("s1");
@@ -56,7 +58,7 @@ describe("layout store", () => {
   });
 
   it("deduplicates diff tabs by source and keeps them across session switches", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     const source = { kind: "working" as const, cwd: "D:/repo", path: "D:/repo/a.ts", from: "HEAD", to: "WORKTREE" };
     openDiffTab("s1", source);
     openDiffTab("s1", source);
@@ -67,7 +69,7 @@ describe("layout store", () => {
   });
 
   it("closes the active tab and selects its neighbour", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     openFileTab("s1", "D:/repo/a.ts");
     openFileTab("s1", "D:/repo/b.ts");
     setActiveTab("s1", fileTabId("D:/repo/a.ts"));
@@ -76,17 +78,20 @@ describe("layout store", () => {
     expect(getWorkbenchContext("s1").tabs).toHaveLength(1);
   });
 
-  it("resets the workbench context when the session root changes", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+  it("moves a changed primary root first without resetting tabs", () => {
+    ensureWorkbenchRoots("s1", "D:/repo");
+    addWorkbenchRoot("s1", "D:/extra");
     openFileTab("s1", "D:/repo/a.ts");
-    ensureWorkbenchRoot("s1", "D:/other");
+    ensureWorkbenchRoots("s1", "D:/other");
     const context = getWorkbenchContext("s1");
-    expect(context.root).toBe("D:/other");
-    expect(context.tabs).toHaveLength(0);
+    expect(context.roots).toEqual(["D:/other", "D:/repo", "D:/extra"]);
+    expect(context.tabs).toHaveLength(1);
+    ensureWorkbenchRoots("s1", "D:/other");
+    expect(getWorkbenchContext("s1").roots).toEqual(["D:/other", "D:/repo", "D:/extra"]);
   });
 
   it("opens one terminal tab per cwd and persists it", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     openTerminalTab("s1", "D:/repo");
     openTerminalTab("s1", "D:\\repo\\");
     openTerminalTab("s1", "D:/repo/apps/web");
@@ -129,7 +134,7 @@ describe("layout store", () => {
   });
 
   it("renames every open file tab under a renamed directory", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     openFileTab("s1", "D:/repo/src/a.ts");
     openFileTab("s1", "D:/repo/src/deep/b.ts");
     openFileTab("s1", "D:/repo/src2/c.ts");
@@ -157,7 +162,7 @@ describe("layout store", () => {
   });
 
   it("keeps preview and scroll when a file tab is renamed", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     openFileTab("s1", "D:/repo/old.ts", true);
     setTabScroll("s1", fileTabId("D:/repo/old.ts"), 42);
 
@@ -176,7 +181,7 @@ describe("layout store", () => {
   });
 
   it("closes file and diff tabs for a deleted directory and moves the active tab", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     const source = { kind: "working" as const, cwd: "D:/repo", path: "D:/repo/src/a.ts", from: "HEAD", to: "WORKTREE" };
     openFileTab("s1", "D:/repo/src/a.ts");
     openFileTab("s1", "D:/repo/src/b.ts");
@@ -201,8 +206,59 @@ describe("layout store", () => {
     expect(context.activeTabId).toBe(fileTabId("D:/repo/keep.ts"));
   });
 
+  it("migrates a legacy single root and accepts the problems view", () => {
+    localStorage.setItem("omp.workbench.v1.legacy", JSON.stringify({
+      root: "D:/repo",
+      view: "problems",
+      tabs: [],
+    }));
+    const context = getWorkbenchContext("legacy");
+    expect(context.roots).toEqual(["D:/repo"]);
+    expect(context.view).toBe("problems");
+  });
+
+  it("adds and removes non-primary roots, closing only their tabs", () => {
+    ensureWorkbenchRoots("s1", "D:/repo");
+    addWorkbenchRoot("s1", "D:/extra");
+    addWorkbenchRoot("s1", "D:/repo");
+    addWorkbenchRoot("s1", "D:/extra");
+    expect(getWorkbenchContext("s1").roots).toEqual(["D:/repo", "D:/extra"]);
+    openFileTab("s1", "D:/repo/a.ts");
+    openFileTab("s1", "D:/extra/b.ts");
+    openTerminalTab("s1", "D:/extra");
+
+    expect(removeWorkbenchRoot("s1", "D:/repo")).toEqual([]);
+    expect(getWorkbenchContext("s1").roots).toEqual(["D:/repo", "D:/extra"]);
+
+    const closed = removeWorkbenchRoot("s1", "D:/extra");
+    expect(closed).toEqual([fileTabId("D:/extra/b.ts"), terminalTabId("D:/extra")]);
+    const context = getWorkbenchContext("s1");
+    expect(context.roots).toEqual(["D:/repo"]);
+    expect(context.tabs.map((tab) => tab.path)).toEqual(["D:/repo/a.ts"]);
+    expect(context.activeTabId).toBe(fileTabId("D:/repo/a.ts"));
+  });
+
+  it("caps added roots at eight", () => {
+    ensureWorkbenchRoots("s1", "D:/repo");
+    for (let index = 0; index < 10; index += 1) addWorkbenchRoot("s1", `D:/extra-${index}`);
+    expect(getWorkbenchContext("s1").roots).toHaveLength(8);
+  });
+
+  it("stores and updates a tab position", () => {
+    ensureWorkbenchRoots("s1", "D:/repo");
+    openFileTab("s1", "D:/repo/a.ts", false, { line: 3, column: 2 });
+    expect(getWorkbenchContext("s1").tabs[0]?.position).toEqual({ line: 3, column: 2 });
+
+    openFileTab("s1", "D:/repo/a.ts", false, { line: 7, column: 1 });
+    expect(getWorkbenchContext("s1").tabs[0]?.position).toEqual({ line: 7, column: 1 });
+    const stored = JSON.parse(localStorage.getItem("omp.workbench.v1.s1") ?? "{}") as {
+      tabs?: { position?: { line: number; column: number } }[];
+    };
+    expect(stored.tabs?.[0]?.position).toEqual({ line: 7, column: 1 });
+  });
+
   it("closes an inactive file tab without disturbing the active one", () => {
-    ensureWorkbenchRoot("s1", "D:/repo");
+    ensureWorkbenchRoots("s1", "D:/repo");
     openFileTab("s1", "D:/repo/src/a.ts");
     openFileTab("s1", "D:/repo/src/a.ts.bak");
     setActiveTab("s1", fileTabId("D:/repo/src/a.ts.bak"));

@@ -84,14 +84,45 @@ export function parseNativeSettings(value: unknown): NativeSettings {
   return value as unknown as NativeSettings;
 }
 
+type LspSettingsPayload = WebSettings["lsp"];
+type LspServerPayload = LspSettingsPayload["servers"][number];
+
+function parseLspServers(value: unknown): LspServerPayload[] {
+  if (!Array.isArray(value)) return [];
+  const servers: LspServerPayload[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const id = entry.id;
+    const languages = entry.languages;
+    const command = entry.command;
+    const args = entry.args;
+    if (typeof id !== "string" || typeof command !== "string") continue;
+    if (!Array.isArray(languages) || !Array.isArray(args)) continue;
+    const server: LspServerPayload = {
+      id,
+      languages: languages.filter((language): language is string => typeof language === "string"),
+      command,
+      args: args.filter((arg): arg is string => typeof arg === "string"),
+    };
+    if (isRecord(entry.env)) server.env = stringRecord(entry.env);
+    servers.push(server);
+  }
+  return servers;
+}
+
 /** Total parse of omp-web's own settings payload. */
 export function parseWebSettings(value: unknown): WebSettings {
   const source: Record<string, unknown> = isRecord(value) ? value : {};
+  const lsp = isRecord(source.lsp) ? source.lsp : {};
   return {
     ...source,
     autoResumeSessions: source.autoResumeSessions === true,
     agentToolsEnabled: source.agentToolsEnabled === true,
     agentEnv: stringRecord(source.agentEnv),
+    lsp: {
+      enabled: lsp.enabled !== false,
+      servers: parseLspServers(lsp.servers),
+    },
   };
 }
 

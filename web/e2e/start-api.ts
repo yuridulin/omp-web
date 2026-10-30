@@ -17,32 +17,46 @@ const REPO_ROOT = path.resolve(WEB_ROOT, "..");
 const TMP_DIR = path.join(HERE, ".tmp");
 const AGENT_DIR = path.join(TMP_DIR, "agent");
 const WORKSPACE = path.join(TMP_DIR, "workspace");
+const WORKSPACE2 = path.join(TMP_DIR, "workspace-2");
 const BIN_DIR = path.join(TMP_DIR, "bin");
 const FAKE_OMP = path.join(HERE, "fake-omp.ts");
+const FAKE_LSP = path.join(HERE, "fake-lsp.ts");
 const PORT = 30179;
 const API_BASE = `http://127.0.0.1:${PORT}`;
 
-function git(args: string[]): void {
-  execFileSync("git", args, { cwd: WORKSPACE, stdio: "ignore", windowsHide: true });
+function git(dir: string, args: string[]): void {
+  execFileSync("git", args, { cwd: dir, stdio: "ignore", windowsHide: true });
 }
 
-function prepareWorkspace(): void {
-  mkdirSync(path.join(WORKSPACE, "src"), { recursive: true });
+function prepareWorkspace(dir: string, title: string): void {
+  mkdirSync(path.join(dir, "src"), { recursive: true });
   writeFileSync(
-    path.join(WORKSPACE, "README.md"),
-    "# E2E workspace\n\nDeterministic fixture workspace for omp-web Playwright tests.\n",
+    path.join(dir, "README.md"),
+    `# ${title}\n\nDeterministic fixture workspace for omp-web Playwright tests.\n`,
     "utf8",
   );
+  writeFileSync(path.join(dir, "src", "app.ts"), 'export const app = "e2e";\n', "utf8");
+  git(dir, ["init", "-q"]);
+  git(dir, ["config", "user.email", "e2e@example.test"]);
+  git(dir, ["config", "user.name", "omp-web e2e"]);
+  git(dir, ["add", "-A"]);
+  git(dir, ["commit", "-q", "-m", "Initial fixture commit"]);
+}
+
+/** The E2E language server, configured through omp-web's own settings file. */
+function writeLspSettings(): void {
   writeFileSync(
-    path.join(WORKSPACE, "src", "app.ts"),
-    'export const app = "e2e";\n',
+    path.join(AGENT_DIR, "omp-web-settings.json"),
+    `${JSON.stringify({
+      lsp: {
+        enabled: true,
+        servers: [
+          { id: "e2e", languages: ["typescript"], command: process.execPath, args: [FAKE_LSP] },
+        ],
+      },
+    }, null, 2)}\n`,
     "utf8",
   );
-  git(["init", "-q"]);
-  git(["config", "user.email", "e2e@example.test"]);
-  git(["config", "user.name", "omp-web e2e"]);
-  git(["add", "-A"]);
-  git(["commit", "-q", "-m", "Initial fixture commit"]);
 }
 
 /** Windows cannot exec a script directly; route the launcher through cmd.exe. */
@@ -64,6 +78,7 @@ function writeEnvironmentFile(launcher: string): void {
     envFile,
     `${JSON.stringify({
       workspace: WORKSPACE,
+      workspace2: WORKSPACE2,
       agentDir: AGENT_DIR,
       apiBase: API_BASE,
       webBase: "http://127.0.0.1:5174",
@@ -75,7 +90,9 @@ function writeEnvironmentFile(launcher: string): void {
 
 rmSync(TMP_DIR, { recursive: true, force: true });
 mkdirSync(AGENT_DIR, { recursive: true });
-prepareWorkspace();
+prepareWorkspace(WORKSPACE, "E2E workspace");
+prepareWorkspace(WORKSPACE2, "E2E workspace 2");
+writeLspSettings();
 const launcher = createOmpLauncher();
 writeEnvironmentFile(launcher);
 

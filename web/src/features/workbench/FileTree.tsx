@@ -10,15 +10,18 @@ const MAX_ENTRIES = 500;
 
 interface FileTreeProps {
   sessionId: string;
-  root: string;
+  roots: string[];
   expanded: string[];
-  gitFiles: GitFileStatus[];
+  /** Keyed by `comparablePath(root)`. */
+  gitFilesByRoot: ReadonlyMap<string, readonly GitFileStatus[]>;
   scrollTop: number;
   onToggle: (path: string) => void;
   onOpen: (path: string, preview: boolean) => void;
   onScroll: (scrollTop: number) => void;
   onRenamed?: (from: string, to: string) => void;
   onDeleted?: (path: string) => void;
+  onRemoveRoot?: (root: string) => void;
+  onOpenTerminal?: (root: string) => void;
 }
 
 interface TreeOps {
@@ -43,15 +46,17 @@ function messageOf(error: unknown): string {
 
 export function FileTree({
   sessionId,
-  root,
+  roots,
   expanded,
-  gitFiles,
+  gitFilesByRoot,
   scrollTop,
   onToggle,
   onOpen,
   onScroll,
   onRenamed,
   onDeleted,
+  onRemoveRoot,
+  onOpenTerminal,
 }: FileTreeProps) {
   const treeRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -60,11 +65,20 @@ export function FileTree({
   const [creating, setCreating] = useState(false);
   const [newPath, setNewPath] = useState("");
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
+  const [activeRoot, setActiveRoot] = useState(roots[0] ?? "");
 
-  const gitByPath = useMemo(
-    () => new Map(gitFiles.map((file) => [comparablePath(file.filePath), file])),
-    [gitFiles],
-  );
+  useEffect(() => {
+    if (roots.includes(activeRoot)) return;
+    setActiveRoot(roots[0] ?? "");
+  }, [roots, activeRoot]);
+
+  const gitByPath = useMemo(() => {
+    const map = new Map<string, GitFileStatus>();
+    for (const files of gitFilesByRoot.values()) {
+      for (const file of files) map.set(comparablePath(file.filePath), file);
+    }
+    return map;
+  }, [gitFilesByRoot]);
 
   useEffect(() => {
     if (treeRef.current) treeRef.current.scrollTop = scrollTop;
@@ -76,8 +90,8 @@ export function FileTree({
 
   const submitNewFile = async () => {
     const relative = newPath.trim();
-    if (!relative) return;
-    const target = joinPath(root, relative);
+    if (!relative || !activeRoot) return;
+    const target = joinPath(activeRoot, relative);
     try {
       await mutations.createFile(target);
       setNewPath("");
@@ -92,8 +106,9 @@ export function FileTree({
   const uploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const selected = Array.from(files);
+    if (!activeRoot) return;
     try {
-      const result = await mutations.upload(root, selected);
+      const result = await mutations.upload(activeRoot, selected);
       const parts: string[] = [];
       if (result.uploaded.length > 0) parts.push(`${result.uploaded.length} uploaded`);
       if (result.skipped.length > 0) parts.push(`${result.skipped.length} skipped`);
@@ -157,6 +172,18 @@ export function FileTree({
         >
           ⟳
         </button>
+        {roots.length > 1 ? (
+          <select
+            className={styles.rootSelect}
+            aria-label="Workspace folder"
+            value={activeRoot}
+            onChange={(event) => setActiveRoot(event.currentTarget.value)}
+          >
+            {roots.map((entry) => (
+              <option key={entry} value={entry}>{entry}</option>
+            ))}
+          </select>
+        ) : null}
         <input
           ref={uploadRef}
           type="file"
@@ -208,18 +235,59 @@ export function FileTree({
         ref={treeRef}
         onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
       >
-        <DirectoryList
-          path={root}
-          depth={0}
-          sessionId={sessionId}
-          expanded={expanded}
-          gitByPath={gitByPath}
-          onToggle={onToggle}
-          onOpen={onOpen}
-          ops={ops}
-          {...(onRenamed ? { onRenamed } : {})}
-          {...(onDeleted ? { onDeleted } : {})}
-        />
+        {roots.map((root, index) => {
+          const files = gitFilesByRoot.get(comparablePath(root)) ?? [];
+          return (
+            <section key={root} className={styles.rootGroup}>
+              <div
+                className={activeRoot === root ? `${styles.rootHeader} ${styles.rootHeaderActive}` : styles.rootHeader}
+                title={root}
+                onClick={() => setActiveRoot(root)}
+              >
+                <span className={styles.rootTitle}>
+                  {root.split(/[\\/]/).filter(Boolean).pop() ?? root}
+                </span>
+                {files.length > 0 ? <span className={styles.rootCount}>{files.length}</span> : null}
+                {onOpenTerminal ? (
+                  <button
+                    className={styles.rowAction}
+                    title={`Terminal — ${root}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenTerminal(root);
+                    }}
+                  >
+                    &gt;_
+                  </button>
+                ) : null}
+                {index > 0 && onRemoveRoot ? (
+                  <button
+                    className={styles.rowAction}
+                    title={`Remove ${root}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemoveRoot(root);
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+              <DirectoryList
+                path={root}
+                depth={0}
+                sessionId={sessionId}
+                expanded={expanded}
+                gitByPath={gitByPath}
+                onToggle={onToggle}
+                onOpen={onOpen}
+                ops={ops}
+                {...(onRenamed ? { onRenamed } : {})}
+                {...(onDeleted ? { onDeleted } : {})}
+              />
+            </section>
+          );
+        })}
       </div>
     </div>
   );

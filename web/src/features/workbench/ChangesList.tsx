@@ -9,6 +9,7 @@ import gitStyles from "./git-actions.module.css";
 
 interface ChangesListProps {
   root: string;
+  label?: string;
   status: GitStatus | undefined;
   loading: boolean;
   error: string | null;
@@ -101,6 +102,7 @@ function statusClass(file: GitFileStatus): string {
 
 export function ChangesList({
   root,
+  label,
   status,
   loading,
   error,
@@ -134,6 +136,7 @@ export function ChangesList({
   return (
     <div className={styles.changes}>
       <div className={styles.changesHeader}>
+        {label ? <span className={styles.changesLabel} title={root}>{label}</span> : null}
         <span className={styles.changesCount}>
           {status?.isGitRepository ? `${status.files.length} changed` : "not a git repo"}
         </span>

@@ -25,7 +25,7 @@ export const contract = routeContract({
           .looseObject({
             id: z.string(),
             channel: z.looseObject({
-              kind: z.enum(["running", "notifications", "session", "file", "workspace", "host-tools"]),
+              kind: z.enum(["running", "notifications", "session", "file", "workspace", "lsp", "host-tools"]),
               clientId: z.string().optional(),
               sessionId: z.string().optional(),
               path: z.string().optional(),

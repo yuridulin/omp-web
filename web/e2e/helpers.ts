@@ -6,6 +6,7 @@ import { expect, type Page } from "@playwright/test";
 
 export interface E2EEnvironment {
   workspace: string;
+  workspace2: string;
   agentDir: string;
   apiBase: string;
   webBase: string;
@@ -22,6 +23,24 @@ export function readEnvironment(): E2EEnvironment {
 /** Absolute path inside the fixture workspace. */
 export function workspacePath(...segments: string[]): string {
   return path.join(readEnvironment().workspace, ...segments);
+}
+
+/** Absolute path inside the second fixture workspace. */
+export function workspace2Path(...segments: string[]): string {
+  return path.join(readEnvironment().workspace2, ...segments);
+}
+
+/** Register another allowed project, as the workbench's add-folder menu does. */
+export async function registerProject(cwd: string): Promise<void> {
+  const env = readEnvironment();
+  const response = await fetch(`${env.apiBase}/api/workspace/projects`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cwd }),
+  });
+  if (!response.ok) {
+    throw new Error(`Registering ${cwd} failed (${response.status}): ${await response.text()}`);
+  }
 }
 
 function escapeRegExp(value: string): string {

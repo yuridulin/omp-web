@@ -4,12 +4,27 @@ import { errorEnvelope, routeContract } from "@/server/contract";
 import { syncInterruptibleSessions } from "@/lib/rpc-manager";
 import { parseAgentEnvText, sanitizeAgentEnvValues, type AgentEnvParseResult } from "@/lib/omp/agent-env";
 import { loadWebServerSettings, saveWebServerSettings, type WebServerSettings } from "@/lib/web-settings";
+import { readLspSettings, validateLspSettings } from "@/lib/lsp/types";
 import { isRecord } from "@/lib/type-guards";
+
+const lspServerSchema = z.object({
+  id: z.string(),
+  languages: z.array(z.string()),
+  command: z.string(),
+  args: z.array(z.string()),
+  env: z.record(z.string(), z.string()).optional(),
+});
+
+const lspSettingsSchema = z.object({
+  enabled: z.boolean(),
+  servers: z.array(lspServerSchema),
+});
 
 const webServerSettingsSchema = z.looseObject({
   autoResumeSessions: z.boolean(),
   agentToolsEnabled: z.boolean(),
   agentEnv: z.record(z.string(), z.string()),
+  lsp: lspSettingsSchema,
 });
 
 export const contract = routeContract({
@@ -24,6 +39,7 @@ export const contract = routeContract({
         autoResumeSessions: z.boolean().optional(),
         agentToolsEnabled: z.boolean().optional(),
         agentEnv: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+        lsp: lspSettingsSchema.optional(),
       }),
     },
     responses: {
@@ -41,7 +57,11 @@ export async function GET() {
 /** Never surface a variable lib/omp/agent-env.ts would refuse to spawn with. */
 function readSettings(): WebServerSettings {
   const settings = loadWebServerSettings();
-  return { ...settings, agentEnv: sanitizeAgentEnvValues(settings.agentEnv).values };
+  return {
+    ...settings,
+    agentEnv: sanitizeAgentEnvValues(settings.agentEnv).values,
+    lsp: readLspSettings(settings.lsp),
+  };
 }
 
 export async function PUT(req: Request) {
@@ -51,7 +71,12 @@ export async function PUT(req: Request) {
   if (!isRecord(body)) {
     return json({ error: "Request body must be a settings object", code: "invalid_settings" }, { status: 400 });
   }
-  const payload = body as { autoResumeSessions?: unknown; agentToolsEnabled?: unknown; agentEnv?: unknown };
+  const payload = body as {
+    autoResumeSessions?: unknown;
+    agentToolsEnabled?: unknown;
+    agentEnv?: unknown;
+    lsp?: unknown;
+  };
   const patch: Partial<WebServerSettings> = {};
 
   // Both keys are optional so a caller can update one without reading the other;
@@ -92,6 +117,17 @@ export async function PUT(req: Request) {
       );
     }
     patch.agentEnv = parsed.values;
+  }
+
+  if (payload.lsp !== undefined) {
+    const lsp = validateLspSettings(payload.lsp);
+    if (!lsp) {
+      return json(
+        { error: "lsp must be { enabled: boolean, servers: [...] }", code: "invalid_lsp_settings" },
+        { status: 400 },
+      );
+    }
+    patch.lsp = lsp;
   }
 
   const settings = saveWebServerSettings(patch);

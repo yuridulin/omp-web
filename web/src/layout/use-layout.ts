@@ -13,7 +13,7 @@ export function useLayout(): LayoutState {
 }
 
 const EMPTY_CONTEXT: WorkbenchContext = {
-  root: null,
+  roots: [],
   view: "files",
   expanded: [],
   tabs: [],

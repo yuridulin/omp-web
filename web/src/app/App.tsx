@@ -21,9 +21,9 @@ import type { ComposerSubmitMode } from "@/features/chat/Composer";
 import { Workbench } from "@/features/workbench/Workbench";
 import { useSessionContext } from "@/features/workbench/use-workbench-data";
 import { SystemPanel } from "@/features/system/SystemPanel";
-import { ensureWorkbenchRoot, updateLayout } from "@/layout/layout-store";
+import { ensureWorkbenchRoots, updateLayout } from "@/layout/layout-store";
 import { ResizeHandle } from "@/layout/ResizeHandle";
-import { useLayout } from "@/layout/use-layout";
+import { useLayout, useWorkbench } from "@/layout/use-layout";
 import { useRunningSessions, useSessionStream, useWorkspaceEvents } from "@/state/event-stream";
 import { NotificationProvider } from "@/state/notification-center";
 import {
@@ -146,10 +146,11 @@ export function App() {
   const running = useRunningSessions(fallbackRunning);
   const agentRunning = snapshot?.session.run.status === "running";
   const { error: streamError } = useSessionStream(selected, streamRevision);
-  useWorkspaceEvents(root);
+  const workbenchRoots = useWorkbench(selected).roots;
+  useWorkspaceEvents(workbenchRoots);
 
   useEffect(() => {
-    if (selected && root) ensureWorkbenchRoot(selected, root);
+    if (selected && root) ensureWorkbenchRoots(selected, root);
   }, [root, selected]);
 
   useEffect(() => {
@@ -421,9 +422,13 @@ export function App() {
             <div className={styles.workbenchPane} style={{ width: layout.workbenchWidth }}>
               <Workbench
                 sessionId={selected}
-                root={root}
+                primaryRoot={root}
                 projectLabel={projectLabel}
                 onClose={toggleWorkbench}
+                onInlinePrompt={async (text) => {
+                  if (!selected) throw new Error("Select a session first.");
+                  await runIntent(selected, { kind: "prompt", text });
+                }}
               />
             </div>
           </>

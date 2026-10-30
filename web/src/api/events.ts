@@ -40,6 +40,7 @@ export type Channel =
   | { kind: "running" }
   | { kind: "session"; sessionId: string }
   | { kind: "workspace"; root: string }
+  | { kind: "lsp"; root: string }
   | { kind: "file"; path: string; sessionId: string | null }
   | { kind: "notifications"; clientId: string }
   | { kind: "host-tools" };

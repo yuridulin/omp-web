@@ -2,11 +2,11 @@
 
 Framework-free TypeScript logic for an [omp](https://github.com/oh-my-pi/oh-my-pi)
 client, the Bun host that drives `omp --mode rpc-ui` and its session files,
-and a minimal HTTP server that exposes the host over the same `/api/*` routes
-the previous web app used.
+and a minimal HTTP server that exposes the host over `/api/*`.
 
-There is no React, no Next.js and no UI framework. A future client can talk to
-the HTTP API or import the core directly.
+The server, `core/` and `lib/` stay framework-free: no React, no Next.js.
+The browser client lives in `web/` (React 19 + Vite) and talks to the HTTP API
+only; anything outside it can still import the core directly.
 
 ## Layout
 
@@ -16,9 +16,12 @@ core/   pure TypeScript: no React, DOM, fetch, storage, timers or Node imports
         side questions, models, todos, subagents, host tools, session files
         and lists, history paging, RPC framing, routing
 lib/    Bun host layer: omp process + NDJSON transport, session file IO,
-        model/MCP/settings config, usage, media, notifications, skills, STT
+        model/MCP/settings config, usage, media, notifications, skills, STT,
+        LSP clients
 server/ Bun.serve server; handlers use server/http.ts helpers (json,
         readJson) and native Request/Response
+contract/ generated open-api.yaml and the SSE/terminal frame document
+web/    React 19 + Vite SPA; HTTP + OpenAPI types only
 ```
 
 `core/types.ts` and `core/pi-types.ts` hold the shared omp shapes. `core/index.ts`
@@ -37,7 +40,7 @@ Endpoints are grouped by domain:
   plugins;
 - `/api/workspace/*` — files (read/write/rename/delete/upload), index, git
   (status/diff/stage/commit/branches/checkout), worktrees, projects, media,
-  cwd, and the terminal WebSocket;
+  LSP documents/diagnostics, cwd, and the terminal WebSocket;
 - `/api/system/*` — models, providers, auth, settings, usage, notifications,
   STT, skills, MCP, updates.
 

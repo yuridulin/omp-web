@@ -9,6 +9,7 @@ import {
   type NativeSettings,
   type WebSettings,
 } from "@/api/system-config";
+import { isRecord } from "@/api/guards";
 import {
   systemConfigErrorMessage,
   useNativeSettings,
@@ -62,6 +63,48 @@ const EXTENSION_APPROVAL_OPTIONS: readonly Option[] = [
   { value: "allow", label: "allow" },
   { value: "prompt", label: "prompt" },
 ];
+
+/** Validate the JSON textarea before it reaches the server's stricter parser. */
+function parseLspServersText(
+  text: string,
+): { servers: WebSettings["lsp"]["servers"] } | { error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { servers: [] };
+  let value: unknown;
+  try {
+    value = JSON.parse(trimmed);
+  } catch {
+    return { error: "Language server definitions must be valid JSON." };
+  }
+  if (!Array.isArray(value)) return { error: "Language server definitions must be a JSON array." };
+  const servers: WebSettings["lsp"]["servers"] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) return { error: "Each language server must be an object." };
+    const { id, languages, command, args, env } = entry;
+    if (typeof id !== "string" || !id.trim()) return { error: "Every server needs a non-empty id." };
+    if (!Array.isArray(languages) || languages.some((language) => typeof language !== "string")) {
+      return { error: `Server ${id}: languages must be an array of strings.` };
+    }
+    if (typeof command !== "string" || !command.trim()) {
+      return { error: `Server ${id}: command must be a non-empty string.` };
+    }
+    if (args !== undefined && (!Array.isArray(args) || args.some((arg) => typeof arg !== "string"))) {
+      return { error: `Server ${id}: args must be an array of strings.` };
+    }
+    if (env !== undefined && (!isRecord(env) || Object.values(env).some((item) => typeof item !== "string"))) {
+      return { error: `Server ${id}: env must map names to strings.` };
+    }
+    const server: WebSettings["lsp"]["servers"][number] = {
+      id,
+      languages: languages as string[],
+      command,
+      args: (args as string[] | undefined) ?? [],
+    };
+    if (env && isRecord(env)) server.env = env as Record<string, string>;
+    servers.push(server);
+  }
+  return { servers };
+}
 
 interface SelectFieldProps {
   label: string;
@@ -138,6 +181,7 @@ export function SettingsForm(): JSX.Element {
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [webDraft, setWebDraft] = useState<WebSettings | null>(null);
   const [envText, setEnvText] = useState("");
+  const [lspServersText, setLspServersText] = useState("");
   const [envErrors, setEnvErrors] = useState<string[]>([]);
   const [webFeedback, setWebFeedback] = useState<string | null>(null);
   const [webError, setWebError] = useState<string | null>(null);
@@ -150,6 +194,7 @@ export function SettingsForm(): JSX.Element {
     if (!webQuery.data) return;
     setWebDraft(webQuery.data);
     setEnvText(formatAgentEnv(webQuery.data.agentEnv));
+    setLspServersText(JSON.stringify(webQuery.data.lsp.servers, null, 2));
   }, [webQuery.data]);
 
   const nativeDirty = useMemo(() => {
@@ -178,7 +223,7 @@ export function SettingsForm(): JSX.Element {
     }
   };
 
-  const updateWeb = (patch: Partial<Pick<WebSettings, "autoResumeSessions" | "agentToolsEnabled">>) => {
+  const updateWeb = (patch: Partial<Pick<WebSettings, "autoResumeSessions" | "agentToolsEnabled" | "lsp">>) => {
     setWebDraft((current): WebSettings | null => (current ? { ...current, ...patch } : current));
     setWebFeedback(null);
     setWebError(null);
@@ -194,14 +239,21 @@ export function SettingsForm(): JSX.Element {
       setWebError("Fix the agent environment errors before saving.");
       return;
     }
+    const lsp = parseLspServersText(lspServersText);
+    if ("error" in lsp) {
+      setWebError(lsp.error);
+      return;
+    }
     try {
       const saved = await saveWeb.mutateAsync({
         autoResumeSessions: webDraft.autoResumeSessions,
         agentToolsEnabled: webDraft.agentToolsEnabled,
         agentEnv: parsed.values,
+        lsp: { enabled: webDraft.lsp.enabled, servers: lsp.servers },
       });
       setWebDraft(saved);
       setEnvText(formatAgentEnv(saved.agentEnv));
+      setLspServersText(JSON.stringify(saved.lsp.servers, null, 2));
       setWebFeedback("Web settings saved");
     } catch (cause) {
       setWebError(systemConfigErrorMessage(cause));
@@ -385,6 +437,34 @@ export function SettingsForm(): JSX.Element {
                   checked={webDraft.agentToolsEnabled}
                   disabled={webBusy}
                   onChange={(checked) => updateWeb({ agentToolsEnabled: checked })}
+                />
+              </Section>
+
+              <Section title="Language servers">
+                <ToggleField
+                  label="Enable language servers"
+                  checked={webDraft.lsp.enabled}
+                  disabled={webBusy}
+                  onChange={(checked) => updateWeb({ lsp: { ...webDraft.lsp, enabled: checked } })}
+                />
+                <p className={styles.hint}>
+                  Built-in presets: <code>typescript</code> (bundled server) and <code>csharp</code>
+                  {" "}(<code>csharp-ls</code> or <code>omnisharp</code> on PATH). New servers apply to
+                  documents opened after saving.
+                </p>
+                <textarea
+                  className={styles.textarea}
+                  aria-label="Language server definitions (JSON)"
+                  spellCheck={false}
+                  value={lspServersText}
+                  disabled={webBusy}
+                  rows={8}
+                  placeholder={'[\n  {\n    "id": "typescript",\n    "languages": ["typescript"],\n    "command": "typescript-language-server",\n    "args": ["--stdio"]\n  }\n]'}
+                  onChange={(event) => {
+                    setLspServersText(event.currentTarget.value);
+                    setWebFeedback(null);
+                    setWebError(null);
+                  }}
                 />
               </Section>
 

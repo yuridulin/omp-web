@@ -121,10 +121,10 @@ SSE в OpenAPI описывается плохо. Поток и его конв�
 | stage/commit/branch/checkout | да: `/api/workspace/git/{stage,unstage,commit,branches,checkout}` |
 | живые изменения файлов проекта | да: SSE-канал `workspace` (`workspace-changed`) |
 | терминал | да: WebSocket `/api/workspace/terminal` (PTY, вне `omp`) |
-| LSP/диагностика | нет (M4) |
+| LSP/диагностика | да: `/api/workspace/lsp/{documents,diagnostics}`, SSE-канал `lsp` |
 
-LSP и inline-правки осознанно остаются вне M1–M2. API спроектирован так, чтобы
-эти домены добавлялись, не ломая агентские маршруты.
+LSP и inline-правки осознанно оставались вне M1–M2 и появились в M4, не меняя
+агентские маршруты.
 
 ## 6. Механики
 
@@ -211,9 +211,15 @@ WebSocket `/api/workspace/terminal` на `node-pty`).
 
 **M3. UI в `web/`.** Консоль, Monaco, панели файлов и git. Только HTTP;
 типизация клиента — из `open-api.yaml`. Визуальный ориентир из §8.
+**Статус: выполнено** (React 19 + Vite 8, чат на снимках, workbench
+Files/Changes/терминал, Monaco + xterm.js, Playwright e2e).
 
 **M4. Совмещение.** Inline-правки в стиле Cursor, LSP-диагностика, multi-root,
 расширения. Только после стабильных M1–M3.
+**Статус: выполнено** (inline-правки через scoped-промпт в активную сессию,
+LSP через `lib/lsp` + `/api/workspace/lsp/*` и SSE-канал `lsp`, multi-root в
+workbench; extension-запросы `omp` обрабатываются в M3, extension host VS Code
+остаётся non-goal §10).
 
 ## 10. Non-goals
 

@@ -20,6 +20,7 @@ The browser holds **one** SSE response and multiplexes every channel over it.
 | `{ kind: "notifications", clientId }` | `notification` routed to this tab |
 | `{ kind: "session", sessionId }` | `connected`, authoritative `snapshot`, raw omp frames (debug only) |
 | `{ kind: "workspace", root }` | `workspace-changed` for an authorized root |
+| `{ kind: "lsp", root }` | `lsp-diagnostics` for documents under an authorized root |
 | `{ kind: "file", path, sessionId? }` | change notifications for one file |
 | `{ kind: "host-tools" }` | `host_tool_call` from sessions no tab is watching |
 
@@ -47,6 +48,31 @@ The browser holds **one** SSE response and multiplexes every channel over it.
 Paths are POSIX-relative to `root`, sorted, debounced by 150 ms, capped at
 2000 entries per frame (`truncated: true` when the cap is hit). `.git` and
 `node_modules` are ignored. The root must be an allowed workspace.
+
+### `lsp`
+
+`lsp-diagnostics` shape:
+
+```json
+{
+  "type": "lsp-diagnostics",
+  "root": "/abs/root",
+  "path": "/abs/root/src/a.ts",
+  "version": 3,
+  "diagnostics": [
+    {
+      "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 4 } },
+      "severity": 1,
+      "source": "typescript",
+      "message": "Cannot find name 'foo'."
+    }
+  ]
+}
+```
+
+Sent after every `publishDiagnostics` for a document open in this root, and
+with `diagnostics: []` when the document closes or its server exits. The root
+must be an allowed workspace.
 
 ## Terminal (WebSocket)
 

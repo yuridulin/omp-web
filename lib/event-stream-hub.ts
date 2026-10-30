@@ -8,6 +8,7 @@ import { getExitedRpcSessions, getRpcSession, getRunningRpcSessions, subscribeHo
 import { snapshotFrame } from "./session-authority";
 import { subscribeSessionFileChanges } from "./session-watcher";
 import { watchWorkspace } from "./workspace-watcher";
+import { subscribeLsp } from "./lsp/manager";
 import {
   MUX_CONTROL_EVENT,
   UNKNOWN_CONNECTION_CODE,
@@ -238,6 +239,8 @@ async function openChannel(channel: EventStreamChannel, handle: SubscriptionHand
       return openSessionChannel(channel.sessionId, handle);
     case "workspace":
       return openWorkspaceChannel(channel.root, handle);
+    case "lsp":
+      return openLspChannel(channel.root, handle);
     case "file":
       return openFileChannel(channel.path, channel.sessionId, handle);
     case "host-tools":
@@ -300,6 +303,19 @@ async function openWorkspaceChannel(root: string, handle: SubscriptionHandle): P
   }
   handle.open();
   handle.setDetach(watchWorkspace(root, (change) => handle.send({ type: "workspace-changed", ...change })));
+  return SUBSCRIBED;
+}
+
+// Diagnostics for documents open under one authorized workspace root.
+async function openLspChannel(root: string, handle: SubscriptionHandle): Promise<SubscribeResult> {
+  const roots = await getAllowedFileRoots();
+  if (!isExistingFilePathAllowed(root, roots)) {
+    return { ok: false, status: 403, error: "Workspace is not allowed", code: "access_denied" };
+  }
+  handle.open();
+  handle.setDetach(
+    subscribeLsp(root, (update) => handle.send({ type: "lsp-diagnostics", ...update })),
+  );
   return SUBSCRIBED;
 }
 

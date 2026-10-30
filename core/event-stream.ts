@@ -28,6 +28,8 @@ export type EventStreamChannel =
   | { kind: "file"; path: string; sessionId: string | null }
   /** Recursive file changes under one authorized workspace root. */
   | { kind: "workspace"; root: string }
+  /** Diagnostics published for documents under one workspace root. */
+  | { kind: "lsp"; root: string }
   /** Host tool calls (open_url, notify, open_file) from sessions no tab is watching. */
   | { kind: "host-tools" };
 
@@ -61,6 +63,8 @@ export function parseEventStreamChannel(value: unknown): EventStreamChannel | nu
       return isBoundedString(channel.sessionId, MAX_ID_LENGTH) ? { kind: "session", sessionId: channel.sessionId } : null;
     case "workspace":
       return isBoundedString(channel.root, MAX_PATH_LENGTH) ? { kind: "workspace", root: channel.root } : null;
+    case "lsp":
+      return isBoundedString(channel.root, MAX_PATH_LENGTH) ? { kind: "lsp", root: channel.root } : null;
     case "file": {
       if (!isBoundedString(channel.path, MAX_PATH_LENGTH)) return null;
       const sessionId = channel.sessionId ?? null;

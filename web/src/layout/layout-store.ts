@@ -1,6 +1,6 @@
-import { basename, normalizeSlashes } from "@/api/paths";
+import { basename, comparablePath, isAbsolutePath, isPathWithin, normalizeSlashes } from "@/api/paths";
 
-export type WorkbenchView = "files" | "changes";
+export type WorkbenchView = "files" | "changes" | "problems";
 
 export interface DiffTabSource {
   kind: "working" | "commit";
@@ -20,10 +20,11 @@ export interface WorkbenchTab {
   diff?: DiffTabSource;
   terminalCwd?: string;
   scrollTop?: number;
+  position?: { line: number; column: number };
 }
 
 export interface WorkbenchContext {
-  root: string | null;
+  roots: string[];
   view: WorkbenchView;
   expanded: string[];
   tabs: WorkbenchTab[];
@@ -61,6 +62,7 @@ const MIN_NAVIGATOR = 140;
 const MAX_NAVIGATOR = 520;
 const MAX_TABS = 30;
 const MAX_EXPANDED = 500;
+const MAX_ROOTS = 8;
 
 function storage(): Storage | null {
   try {
@@ -135,7 +137,7 @@ const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function defaultContext(root: string | null = null): WorkbenchContext {
   return {
-    root,
+    roots: root ? [root] : [],
     view: "files",
     expanded: [],
     tabs: [],
@@ -150,6 +152,11 @@ function isTab(value: unknown): value is WorkbenchTab {
   const record = value as Record<string, unknown>;
   if (typeof record.id !== "string" || typeof record.path !== "string" || typeof record.title !== "string") return false;
   if (record.kind !== "file" && record.kind !== "diff" && record.kind !== "terminal") return false;
+  if (record.position !== undefined) {
+    if (!record.position || typeof record.position !== "object" || Array.isArray(record.position)) return false;
+    const position = record.position as Record<string, unknown>;
+    if (typeof position.line !== "number" || typeof position.column !== "number") return false;
+  }
   if (record.kind === "terminal") return typeof record.terminalCwd === "string" && record.terminalCwd.length > 0;
   if (record.kind === "diff") {
     const diff = record.diff;
@@ -168,9 +175,22 @@ function sanitizeContext(value: unknown, fallbackRoot: string | null): Workbench
   const activeTabId = typeof record.activeTabId === "string" && tabs.some((tab) => tab.id === record.activeTabId)
     ? record.activeTabId
     : tabs[0]?.id ?? null;
+  const roots: string[] = [];
+  const candidates = Array.isArray(record.roots)
+    ? record.roots
+    : typeof record.root === "string"
+      ? [record.root]
+      : [];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || !isAbsolutePath(candidate)) continue;
+    if (roots.some((entry) => comparablePath(entry) === comparablePath(candidate))) continue;
+    roots.push(candidate);
+    if (roots.length >= MAX_ROOTS) break;
+  }
+  if (roots.length === 0 && fallbackRoot) roots.push(fallbackRoot);
   return {
-    root: typeof record.root === "string" ? record.root : fallbackRoot,
-    view: record.view === "changes" ? "changes" : "files",
+    roots,
+    view: record.view === "changes" || record.view === "problems" ? record.view : "files",
     expanded: Array.isArray(record.expanded)
       ? record.expanded.filter((path): path is string => typeof path === "string").slice(0, MAX_EXPANDED)
       : [],
@@ -236,11 +256,50 @@ export function updateWorkbenchContext(
   emitWorkbench(sessionId, options.immediate ?? true, options.emit ?? true);
 }
 
-export function ensureWorkbenchRoot(sessionId: string, root: string | null): void {
-  if (!root) return;
-  const context = getWorkbenchContext(sessionId);
-  if (context.root === root) return;
-  updateWorkbenchContext(sessionId, () => defaultContext(root));
+/** Keep the session's primary root first without dropping added roots or tabs. */
+export function ensureWorkbenchRoots(sessionId: string, primaryRoot: string | null): void {
+  if (!primaryRoot) return;
+  updateWorkbenchContext(sessionId, (context) => {
+    const roots = [primaryRoot, ...context.roots.filter((entry) => comparablePath(entry) !== comparablePath(primaryRoot))];
+    const unchanged = roots.length === context.roots.length
+      && roots.every((entry, index) => comparablePath(entry) === comparablePath(context.roots[index] ?? ""));
+    if (unchanged) return context;
+    return { ...context, roots: roots.slice(0, MAX_ROOTS) };
+  });
+}
+
+export function addWorkbenchRoot(sessionId: string, root: string): void {
+  if (!isAbsolutePath(root)) return;
+  updateWorkbenchContext(sessionId, (context) => {
+    if (context.roots.some((entry) => comparablePath(entry) === comparablePath(root))) return context;
+    if (context.roots.length >= MAX_ROOTS) return context;
+    return { ...context, roots: [...context.roots, root] };
+  });
+}
+
+/**
+ * Remove a non-primary root; tabs that only lived under it close. Returns the
+ * closed tab ids so the editor cache can forget them.
+ */
+export function removeWorkbenchRoot(sessionId: string, root: string): string[] {
+  const closed: string[] = [];
+  updateWorkbenchContext(sessionId, (context) => {
+    const index = context.roots.findIndex((entry) => comparablePath(entry) === comparablePath(root));
+    if (index <= 0) return context;
+    const roots = context.roots.filter((_, rootIndex) => rootIndex !== index);
+    let tabs = context.tabs;
+    let activeTabId = context.activeTabId;
+    for (const tab of context.tabs) {
+      if (!isPathWithin(tab.path, root)) continue;
+      if (roots.some((entry) => isPathWithin(tab.path, entry))) continue;
+      closed.push(tab.id);
+      const at = tabs.findIndex((candidate) => candidate.id === tab.id);
+      tabs = tabs.filter((candidate) => candidate.id !== tab.id);
+      if (activeTabId === tab.id) activeTabId = tabs[Math.min(at, tabs.length - 1)]?.id ?? null;
+    }
+    return { ...context, roots, tabs, activeTabId };
+  });
+  return closed;
 }
 
 export function setWorkbenchView(sessionId: string, view: WorkbenchView): void {
@@ -339,17 +398,31 @@ export function renameFileTabs(sessionId: string, from: string, to: string): Ren
   return pairs;
 }
 
-export function openFileTab(sessionId: string, path: string, preview = false): void {
+export function openFileTab(
+  sessionId: string,
+  path: string,
+  preview = false,
+  position?: { line: number; column: number },
+): void {
   const id = fileTabId(path);
   updateWorkbenchContext(sessionId, (context) => {
     const existing = context.tabs.find((tab) => tab.id === id);
     if (existing) {
-      const tabs = preview
-        ? context.tabs
-        : context.tabs.map((tab) => (tab.id === id ? { ...tab, preview: false } : tab));
+      const tabs = context.tabs.map((tab) => {
+        if (tab.id !== id) return tab;
+        const nextPreview = preview ? (tab.preview ?? false) : false;
+        return position ? { ...tab, preview: nextPreview, position } : { ...tab, preview: nextPreview };
+      });
       return { ...context, tabs, activeTabId: id };
     }
-    const tab: WorkbenchTab = { id, kind: "file", path, title: basename(path), preview };
+    const tab: WorkbenchTab = {
+      id,
+      kind: "file",
+      path,
+      title: basename(path),
+      preview,
+      ...(position ? { position } : {}),
+    };
     let tabs = context.tabs;
     if (preview) {
       const previewIndex = tabs.findIndex((candidate) => candidate.preview);

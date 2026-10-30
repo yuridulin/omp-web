@@ -35,6 +35,10 @@ test("accepts every channel kind with a valid payload", () => {
     parseEventStreamChannel({ kind: "workspace", root: "/repo" }),
     { kind: "workspace", root: "/repo" },
   );
+  assert.deepEqual(
+    parseEventStreamChannel({ kind: "lsp", root: "/repo" }),
+    { kind: "lsp", root: "/repo" },
+  );
 });
 
 test("rejects malformed or unbounded channel payloads", () => {
@@ -48,6 +52,8 @@ test("rejects malformed or unbounded channel payloads", () => {
   assert.equal(parseEventStreamChannel({ kind: "file", path: "/a", sessionId: 5 }), null);
   assert.equal(parseEventStreamChannel({ kind: "workspace", root: "" }), null);
   assert.equal(parseEventStreamChannel({ kind: "workspace" }), null);
+  assert.equal(parseEventStreamChannel({ kind: "lsp", root: "" }), null);
+  assert.equal(parseEventStreamChannel({ kind: "lsp" }), null);
   // Notification client ids are strict: no whitespace and bounded length.
   assert.equal(parseEventStreamChannel({ kind: "notifications", clientId: "short" }), null);
   assert.equal(parseEventStreamChannel({ kind: "notifications", clientId: "has space" }), null);

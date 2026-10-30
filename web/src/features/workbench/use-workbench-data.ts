@@ -3,7 +3,6 @@ import {
   fetchFileContent,
   fetchFileList,
   fetchGitFileContents,
-  fetchGitStatus,
   fetchSessionContext,
 } from "@/api/workspace";
 import type { DiffTabSource } from "@/layout/layout-store";
@@ -23,16 +22,6 @@ export function useFileContent(path: string | null, sessionId: string | null) {
     queryFn: () => fetchFileContent(path as string, sessionId ?? undefined),
     enabled: Boolean(path),
     staleTime: 3_000,
-  });
-}
-
-export function useGitStatus(cwd: string | null) {
-  return useQuery({
-    queryKey: ["git-status", cwd],
-    queryFn: () => fetchGitStatus(cwd as string),
-    enabled: Boolean(cwd),
-    staleTime: 3_000,
-    refetchInterval: 10_000,
   });
 }
 

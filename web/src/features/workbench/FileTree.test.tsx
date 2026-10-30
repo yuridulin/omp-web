@@ -52,9 +52,9 @@ function renderTree(options: {
     <QueryClientProvider client={client}>
       <FileTree
         sessionId="session"
-        root={ROOT}
+        roots={[ROOT]}
         expanded={[]}
-        gitFiles={options.gitFiles ?? []}
+        gitFilesByRoot={new Map([[ROOT, options.gitFiles ?? []]])}
         scrollTop={0}
         onToggle={onToggle}
         onOpen={onOpen}
