@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { basename, comparablePath } from "@/api/paths";
 import type { ProjectSummary, SessionSummary } from "@/api/workspace";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
 import styles from "./session-rail.module.css";
 
 interface SessionRailProps {
@@ -11,8 +12,10 @@ interface SessionRailProps {
   loading: boolean;
   error: string | null;
   onSelect: (sessionId: string) => void;
+  onNewSession: () => void;
   onRefresh: () => void;
   onCollapse: () => void;
+  onOpenSettings: () => void;
 }
 
 interface ProjectGroup {
@@ -64,8 +67,10 @@ export function SessionRail({
   loading,
   error,
   onSelect,
+  onNewSession,
   onRefresh,
   onCollapse,
+  onOpenSettings,
 }: SessionRailProps) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -160,6 +165,16 @@ export function SessionRail({
       <header className={styles.header}>
         <span className={styles.brand}>omp</span>
         <div className={styles.headerActions}>
+          <NotificationBell />
+          <button
+            className={styles.iconButton}
+            onClick={onOpenSettings}
+            title="System settings (Ctrl/Cmd+,)"
+            aria-label="System settings"
+          >
+            ⚙
+          </button>
+          <button className={styles.iconButton} onClick={onNewSession} title="New session" aria-label="New session">+</button>
           <button className={styles.iconButton} onClick={onRefresh} title="Refresh sessions">↻</button>
           <button className={styles.iconButton} onClick={onCollapse} title="Hide session rail">«</button>
         </div>

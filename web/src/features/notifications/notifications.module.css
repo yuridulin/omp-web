@@ -1,0 +1,348 @@
+.bellWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.bellButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 3px 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.bellButton:hover,
+.bellButton[aria-expanded="true"] {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 14px;
+  border-radius: 7px;
+  background: var(--accent);
+  padding: 0 3px;
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.panel {
+  position: fixed;
+  top: 44px;
+  left: 12px;
+  z-index: 60;
+  display: flex;
+  width: 340px;
+  max-height: min(74vh, 620px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+}
+
+.panelHeader {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.panelActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action {
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  padding: 2px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.history {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.empty {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.entry {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+}
+
+.entry:last-child {
+  border-bottom: 0;
+}
+
+.unreadEntry {
+  border-left-color: var(--accent);
+  background: rgb(122 162 247 / 7%);
+}
+
+.entryMain {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 7px 8px 7px 9px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.entryMain:hover {
+  background: var(--surface-2);
+}
+
+.entryTitle {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entryBody {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entryTime {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.removeButton {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.removeButton:hover:not(:disabled) {
+  color: var(--error);
+}
+
+.removeButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settingsSection {
+  flex-shrink: 0;
+  max-height: 46%;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  padding: 8px 10px 10px;
+}
+
+.sectionTitle {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-size: 11px;
+}
+
+.settingRow input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+}
+
+.settingLabel {
+  min-width: 82px;
+  color: var(--muted);
+}
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  padding-left: 18px;
+}
+
+.select {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 2px 4px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 10px;
+  outline: none;
+}
+
+.select:focus {
+  border-color: var(--accent);
+}
+
+.pushStatus {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.error {
+  margin: 2px 0 0;
+  color: var(--error);
+  font-size: 10px;
+}
+
+.testButton {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  padding: 3px 8px;
+  color: var(--fg);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.testButton:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.testButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 70;
+  display: flex;
+  width: min(360px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+.toastBody {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toastBody:hover {
+  background: var(--surface-2);
+}
+
+.toastTitle {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toastText {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.toastClose {
+  border: 0;
+  background: transparent;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.toastClose:hover {
+  color: var(--fg);
+}

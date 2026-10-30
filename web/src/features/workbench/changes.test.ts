@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GitFileStatus, GitStatus } from "@/api/workspace";
-import { diffSourceFor, groupChanges } from "./ChangesList";
+import { diffSourceFor, groupActionTargets, groupChanges } from "./ChangesList";
 
 function file(overrides: Partial<GitFileStatus>): GitFileStatus {
   return {
@@ -55,5 +55,30 @@ describe("changes view", () => {
       ["unstaged", ["D:/repo/unstaged.ts"]],
       ["untracked", ["D:/repo/untracked.ts"]],
     ]);
+  });
+
+  it("derives the bulk stage targets for each group", () => {
+    const status: GitStatus = {
+      isGitRepository: true,
+      repositoryRoot: "D:/repo",
+      files: [
+        file({ filePath: "D:/repo/staged.ts", indexStatus: "M", worktreeStatus: " " }),
+        file({ filePath: "D:/repo/unstaged.ts", indexStatus: " ", worktreeStatus: "M" }),
+        file({ filePath: "D:/repo/untracked.ts", status: "untracked", code: "U", indexStatus: "?", worktreeStatus: "?" }),
+        file({ filePath: "D:/repo/conflict.ts", status: "conflict", code: "C", indexStatus: "U", worktreeStatus: "U" }),
+      ],
+    };
+
+    const target = (id: string) => {
+      const group = groupChanges(status).find((entry) => entry.id === id);
+      if (!group) throw new Error(`missing group ${id}`);
+      return groupActionTargets(group);
+    };
+
+    expect(target("staged")).toEqual({ stage: [], unstage: ["D:/repo/staged.ts"] });
+    expect(target("unstaged")).toEqual({ stage: ["D:/repo/unstaged.ts"], unstage: [] });
+    expect(target("untracked")).toEqual({ stage: ["D:/repo/untracked.ts"], unstage: [] });
+    expect(target("conflicts")).toEqual({ stage: ["D:/repo/conflict.ts"], unstage: [] });
+    expect(groupActionTargets({ id: "unknown", label: "Unknown", files: [] })).toEqual({ stage: [], unstage: [] });
   });
 });

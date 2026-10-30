@@ -1,9 +1,13 @@
+import { lazy, Suspense } from "react";
 import { basename } from "@/api/paths";
 import { ResizeHandle } from "@/layout/ResizeHandle";
 import {
   closeTab,
+  closeTabsForPath,
   openDiffTab,
   openFileTab,
+  openTerminalTab,
+  renameFileTabs,
   setActiveTab,
   setChangesScroll,
   setTabScroll,
@@ -19,8 +23,13 @@ import { ChangesList } from "./ChangesList";
 import { DiffView } from "./DiffView";
 import { FileTree } from "./FileTree";
 import { FileView } from "./FileView";
+import { forgetEditorTab, renameEditorTab } from "./editor-state";
 import { Tabs } from "./Tabs";
 import styles from "./workbench.module.css";
+
+// Static import would pull xterm into the initial bundle; the shell loads the
+// terminal chunk only when a terminal tab is open.
+const TerminalView = lazy(() => import("./TerminalView").then((module) => ({ default: module.TerminalView })));
 
 interface WorkbenchProps {
   sessionId: string;
@@ -34,6 +43,7 @@ export function Workbench({ sessionId, root, projectLabel, onClose }: WorkbenchP
   const context = useWorkbench(sessionId);
   const git = useGitStatus(root);
   const activeTab = context.tabs.find((tab) => tab.id === context.activeTabId) ?? null;
+  const terminalTabs = context.tabs.filter((tab) => tab.kind === "terminal");
   const changesCount = git.data?.files.length ?? 0;
 
   const renderActive = (tab: WorkbenchTab) => {
@@ -79,6 +89,16 @@ export function Workbench({ sessionId, root, projectLabel, onClose }: WorkbenchP
         </div>
         <button
           className={styles.iconButton}
+          onClick={() => {
+            if (root) openTerminalTab(sessionId, root);
+          }}
+          disabled={!root}
+          title="Open terminal"
+        >
+          &gt;_
+        </button>
+        <button
+          className={styles.iconButton}
           onClick={() => updateLayout({ navigatorCollapsed: !layout.navigatorCollapsed })}
           title="Toggle navigator"
         >
@@ -104,6 +124,14 @@ export function Workbench({ sessionId, root, projectLabel, onClose }: WorkbenchP
                   onToggle={(path) => toggleExpanded(sessionId, path)}
                   onOpen={(path, preview) => openFileTab(sessionId, path, preview)}
                   onScroll={(scrollTop) => setTreeScroll(sessionId, scrollTop)}
+                  onRenamed={(from, to) => {
+                    const pairs = renameFileTabs(sessionId, from, to);
+                    for (const pair of pairs) renameEditorTab(pair.fromId, pair.toId);
+                  }}
+                  onDeleted={(path) => {
+                    const closed = closeTabsForPath(sessionId, path);
+                    for (const id of closed) forgetEditorTab(id);
+                  }}
                 />
               ) : (
                 <ChangesList
@@ -135,7 +163,22 @@ export function Workbench({ sessionId, root, projectLabel, onClose }: WorkbenchP
             onClose={(tabId) => closeTab(sessionId, tabId)}
           />
           <div className={styles.editorBody}>
-            {activeTab ? renderActive(activeTab) : (
+            {activeTab && activeTab.kind !== "terminal" ? renderActive(activeTab) : null}
+            {terminalTabs.map((tab) => {
+              const visible = tab.id === context.activeTabId;
+              return (
+                <div
+                  key={tab.id}
+                  className={styles.terminalArea}
+                  style={{ display: visible ? "flex" : "none" }}
+                >
+                  <Suspense fallback={<div className={styles.editorStatus}>Loading terminal…</div>}>
+                    <TerminalView cwd={tab.terminalCwd ?? root ?? ""} active={visible} />
+                  </Suspense>
+                </div>
+              );
+            })}
+            {activeTab ? null : (
               <div className={styles.empty}>
                 <p>{root ? "Open a file from the tree." : "No workspace root."}</p>
                 <p className={styles.muted}>Files and diffs stay attached to this session.</p>

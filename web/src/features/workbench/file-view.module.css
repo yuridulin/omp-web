@@ -1,0 +1,117 @@
+.view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.bar {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+.clean {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dirty {
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+.path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error {
+  max-width: 42%;
+  overflow: hidden;
+  color: var(--error);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saveButton {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 8px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.saveButton:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.saveButton:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.conflict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.conflictText {
+  flex: 1;
+  color: var(--warning);
+}
+
+.conflictAction {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 6px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.conflictAction:hover {
+  background: var(--surface-2);
+}
+
+.editor {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.status {
+  padding: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.statusError {
+  padding: 14px;
+  color: var(--error);
+  font-size: 11px;
+}

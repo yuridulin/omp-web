@@ -83,6 +83,17 @@
   color: var(--fg);
 }
 
+.iconButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.iconButton:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
 .body {
   display: flex;
   min-width: 0;
@@ -330,6 +341,21 @@
   font-style: italic;
 }
 
+.tabDirty {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.tabMarker {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+}
+
 .tabClose {
   border: 0;
   border-radius: 3px;
@@ -358,6 +384,15 @@
   padding: 14px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.terminalArea {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .editorError {

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { EventStreamClient, type Channel, type FrameHandler } from "@/api/events";
+import { applyExtensionFrame } from "./extension-store";
 import { applySnapshotFrame, isSnapshotFrame } from "./session-store";
 
 const EventStreamContext = createContext<EventStreamClient | null>(null);
@@ -33,7 +34,12 @@ function channelKey(channel: Channel): string {
   }
 }
 
-export function useChannel(channel: Channel | null, handler: FrameHandler, onError?: (message: string) => void): void {
+export function useChannel(
+  channel: Channel | null,
+  handler: FrameHandler,
+  onError?: (message: string) => void,
+  revision = 0,
+): void {
   const client = useEventStream();
   const channelRef = useRef(channel);
   const handlerRef = useRef(handler);
@@ -43,6 +49,7 @@ export function useChannel(channel: Channel | null, handler: FrameHandler, onErr
   errorRef.current = onError;
   const key = channel ? channelKey(channel) : "";
 
+  // `revision` forces a resubscribe after a saved session is bootstrapped.
   useEffect(() => {
     const current = channelRef.current;
     if (!client || !current) return;
@@ -62,7 +69,7 @@ export function useChannel(channel: Channel | null, handler: FrameHandler, onErr
       cancelled = true;
       detach?.();
     };
-  }, [client, key]);
+  }, [client, key, revision]);
 }
 
 export function useRunningSessions(fallbackIds: readonly string[]): Set<string> {
@@ -82,15 +89,18 @@ export function useRunningSessions(fallbackIds: readonly string[]): Set<string> 
   return useMemo(() => new Set(liveIds ?? fallbackIds), [fallbackIds, liveIds]);
 }
 
-export function useSessionStream(sessionId: string | null): { error: string | null } {
+export function useSessionStream(sessionId: string | null, revision = 0): { error: string | null } {
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => setError(null), [sessionId]);
+  useEffect(() => setError(null), [sessionId, revision]);
   useChannel(
     sessionId ? { kind: "session", sessionId } : null,
     (frame) => {
-      if (sessionId && isSnapshotFrame(frame)) applySnapshotFrame(sessionId, frame);
+      if (!sessionId) return;
+      if (isSnapshotFrame(frame)) applySnapshotFrame(sessionId, frame);
+      applyExtensionFrame(sessionId, frame);
     },
     (message) => setError(message),
+    revision,
   );
   return { error };
 }

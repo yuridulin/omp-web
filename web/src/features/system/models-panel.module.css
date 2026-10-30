@@ -1,0 +1,286 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 12px;
+  color: var(--fg);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 8px 9px;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.provider {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.count {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.modelRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+
+.modelRow:hover {
+  background: var(--surface-2);
+}
+
+.modelName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelId {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.badge {
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+  border-radius: 999px;
+  padding: 0 5px;
+  color: var(--accent);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.modelDetail {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.hint code {
+  color: var(--fg);
+}
+
+.roles {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.roleRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.input {
+  min-width: 0;
+  flex: 1 1 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 2px 5px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 10px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.input:disabled {
+  opacity: 0.55;
+}
+
+.removeButton {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 0 5px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.removeButton:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.removeButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.button,
+.primaryButton {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 2px 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.primaryButton {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--accent);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.button:disabled,
+.primaryButton:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.dirty {
+  color: var(--warning);
+  font-size: 9px;
+}
+
+.status,
+.empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: 10px;
+  white-space: pre-wrap;
+}
+
+.warning {
+  margin: 0;
+  color: var(--warning);
+  font-size: 10px;
+}
+
+.success {
+  margin: 0;
+  color: var(--success);
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

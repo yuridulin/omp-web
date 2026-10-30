@@ -1,0 +1,474 @@
+/* Transcript: message rows, markdown, thinking, tool calls, images. */
+
+.message {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.messageStreaming {
+  border-bottom-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.role {
+  overflow: hidden;
+  padding-top: 1px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.messageStreaming .role {
+  color: var(--accent);
+}
+
+.body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  word-break: break-word;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.streamingCursor {
+  width: 6px;
+  height: 11px;
+  margin-top: 2px;
+  background: var(--accent);
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Markdown --------------------------------------------------------------- */
+
+.markdown {
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown table {
+  margin: 0 0 6px;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 18px;
+}
+
+.markdown li + li {
+  margin-top: 2px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.markdown h1 {
+  font-size: 14px;
+}
+
+.markdown h2 {
+  font-size: 13px;
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  color: color-mix(in srgb, var(--accent) 80%, white);
+}
+
+.markdown strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.markdown blockquote {
+  border-left: 2px solid var(--border);
+  padding: 2px 0 2px 10px;
+  color: var(--muted);
+}
+
+.markdown hr {
+  height: 1px;
+  margin: 8px 0;
+  border: 0;
+  background: var(--border);
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 3px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.markdown code {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  padding: 0 3px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.markdown pre code {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.codeBlock {
+  max-height: 320px;
+  overflow: auto;
+  margin: 4px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.markdown img {
+  max-width: 100%;
+  max-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* Images ----------------------------------------------------------------- */
+
+.image {
+  max-width: 100%;
+  max-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.imagePlaceholder {
+  display: inline-block;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* Thinking --------------------------------------------------------------- */
+
+.thinking {
+  min-width: 0;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+
+.thinkingSummary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.thinkingSummary:hover {
+  color: var(--fg);
+}
+
+.thinkingBody {
+  margin-top: 4px;
+}
+
+.thinkingMarkdown {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.thinkingLoading {
+  color: var(--warning);
+  font-size: 10px;
+}
+
+.thinkingError {
+  margin: 0;
+  color: var(--error);
+  font-size: 11px;
+}
+
+.thinkingEmpty {
+  font-style: italic;
+}
+
+/* Tool calls ------------------------------------------------------------- */
+
+.toolCall {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.toolCallError {
+  border-color: color-mix(in srgb, var(--error) 55%, var(--border));
+}
+
+.toolSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  user-select: none;
+}
+
+.toolSummary:hover {
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
+}
+
+.toolName {
+  overflow: hidden;
+  color: var(--accent);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolStatus {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.toolRunning {
+  color: var(--warning);
+}
+
+.toolError {
+  color: var(--error);
+}
+
+.toolBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+  padding: 6px 8px;
+}
+
+.toolArgs,
+.toolOutput {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.toolArgs {
+  color: var(--muted);
+}
+
+.toolOutput {
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+
+.toolResult {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolResultError .toolOutput {
+  border-left-color: var(--error);
+  color: color-mix(in srgb, var(--error) 75%, var(--fg));
+}
+
+.toolResultName {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.toolImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.toolPartial {
+  color: var(--warning);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.toolPending {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.standaloneResult {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Bash / Python ---------------------------------------------------------- */
+
+.execution {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.command,
+.output {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.command {
+  border-left-color: var(--accent);
+  color: var(--fg);
+}
+
+.output {
+  color: var(--muted);
+}
+
+.badge {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.badgeOk {
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
+  color: var(--success);
+}
+
+.badgeError {
+  border-color: color-mix(in srgb, var(--error) 50%, var(--border));
+  color: var(--error);
+}
+
+.badgeMuted {
+  color: var(--muted);
+}
+
+/* Custom / developer / file mentions ------------------------------------ */
+
+.textual {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subdued {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  padding: 0 5px;
+  font-size: 10px;
+}

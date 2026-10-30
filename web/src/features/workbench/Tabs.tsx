@@ -1,4 +1,5 @@
 import type { WorkbenchTab } from "@/layout/layout-store";
+import { useDirtyTabIds } from "./editor-state";
 import styles from "./workbench.module.css";
 
 interface TabsProps {
@@ -9,6 +10,7 @@ interface TabsProps {
 }
 
 export function Tabs({ tabs, activeTabId, onActivate, onClose }: TabsProps) {
+  const dirtyTabIds = useDirtyTabIds();
   if (tabs.length === 0) return <div className={styles.noTabs}>No open files</div>;
   return (
     <div className={styles.tabStrip} role="tablist">
@@ -34,6 +36,14 @@ export function Tabs({ tabs, activeTabId, onActivate, onClose }: TabsProps) {
           }}
           title={tab.path}
         >
+          {dirtyTabIds.has(tab.id) ? (
+            <span className={styles.tabDirty} title="Unsaved changes" aria-label="Unsaved changes" />
+          ) : null}
+          {tab.kind === "terminal" ? (
+            <span className={styles.tabMarker} aria-hidden="true">
+              &gt;_
+            </span>
+          ) : null}
           <span className={tab.preview ? styles.tabTitlePreview : styles.tabTitle}>{tab.title}</span>
           <button
             className={styles.tabClose}

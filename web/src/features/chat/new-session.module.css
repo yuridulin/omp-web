@@ -1,0 +1,235 @@
+.pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.header {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 14px 16px 16px;
+}
+
+.section {
+  display: flex;
+  width: 100%;
+  max-width: 860px;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 auto;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.select,
+.input {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  padding: 5px 8px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.select {
+  max-width: 220px;
+}
+
+.input {
+  min-width: 220px;
+  flex: 1;
+}
+
+.select:focus,
+.input:focus {
+  border-color: var(--accent);
+}
+
+.select:disabled,
+.input:disabled {
+  opacity: 0.55;
+}
+
+.button,
+.primary {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  padding: 4px 9px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.button:disabled,
+.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--error);
+  border-radius: 4px;
+  padding: 5px 8px;
+  color: var(--error);
+  font-size: 11px;
+}
+
+.picker {
+  display: flex;
+  width: 100%;
+  max-height: 280px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.pickerPath {
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerError {
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--error);
+  font-size: 11px;
+}
+
+.pickerList {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 2px 0;
+  list-style: none;
+}
+
+.pickerList li {
+  margin: 0;
+}
+
+.pickerRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 4px 9px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.pickerRow:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.pickerRow:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pickerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerKind {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.pickerEmpty {
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pickerFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding: 6px 9px;
+}
+
+.composerWrap {
+  width: 100%;
+  max-width: 860px;
+  margin: auto auto 0;
+}

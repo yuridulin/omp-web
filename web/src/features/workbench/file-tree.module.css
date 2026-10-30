@@ -1,0 +1,224 @@
+.container {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: 3px 6px;
+}
+
+.toolButton {
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 5px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.toolButton:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.toolButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.newFileRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: 3px 6px;
+}
+
+.inlineInput {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 1px 4px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 10px;
+}
+
+.inlineInput:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.inlineButton {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 5px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.inlineButton:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.inlineButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.notice,
+.noticeError {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+}
+
+.notice {
+  color: var(--muted);
+}
+
+.noticeError {
+  color: var(--error);
+}
+
+.tree {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.treeRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.treeRow:hover {
+  background: var(--surface-2);
+}
+
+.treeMain {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.treeChevron {
+  width: 10px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.treeFileMark {
+  width: 10px;
+  color: var(--muted);
+}
+
+.treeName {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeActions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  visibility: hidden;
+}
+
+.treeRow:hover .treeActions,
+.treeRow:focus-within .treeActions {
+  visibility: visible;
+}
+
+.rowAction {
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  padding: 0 3px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.rowAction:hover {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.confirmRow {
+  gap: 4px;
+}
+
+.confirmText {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--warning);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeStatus {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.treeError {
+  padding: 6px 10px;
+  color: var(--error);
+  font-size: 10px;
+}
+
+.badge {
+  display: inline-grid;
+  min-width: 13px;
+  height: 13px;
+  place-items: center;
+  border-radius: 3px;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.badgeModified { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.badgeAdded { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.badgeDeleted { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); }
+.badgeConflict { background: color-mix(in srgb, var(--error) 24%, transparent); color: var(--error); }
+.badgeRenamed { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.badgeUntracked { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }

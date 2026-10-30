@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ModelEntry } from "@/api/agent";
 import { isRecord } from "@/api/guards";
 import { basename } from "@/api/paths";
 import type { ChatMessage, SessionSnapshot } from "@/api/session-types";
 import type { SessionContextPayload, SessionSummary } from "@/api/workspace";
-import { messageText } from "@/features/sessions/message-text";
+import type { ExtensionRequest, ExtensionResponse } from "@/state/extension-store";
+import { Composer, type ComposerSubmitMode } from "./Composer";
+import { ExtensionDialog } from "./ExtensionDialog";
+import { MessageView } from "./MessageView";
+import { ModelPicker } from "./ModelPicker";
+import { QueuePanel } from "./QueuePanel";
+import { contentBlocks } from "./transcript";
 import styles from "./chat-pane.module.css";
 
 interface ChatPaneProps {
@@ -12,11 +19,57 @@ interface ChatPaneProps {
   snapshot: SessionSnapshot | null;
   context: SessionContextPayload | undefined;
   streamError: string | null;
+  extensionRequest: ExtensionRequest | null;
+  extensionBusy: boolean;
+  extensionError: string | null;
+  onExtensionResponse: (response: ExtensionResponse) => void | Promise<void>;
   railCollapsed: boolean;
   workbenchCollapsed: boolean;
   onToggleRail: () => void;
   onToggleWorkbench: () => void;
-  onSend: (text: string) => Promise<void>;
+  models: ModelEntry[];
+  modelsLoading: boolean;
+  modelValue: { provider: string; modelId: string } | null;
+  thinkingLevel: string;
+  thinkingLevels: string[];
+  modelLoading: boolean;
+  onModelChange: (provider: string, modelId: string) => void;
+  onThinkingChange: (level: string) => void;
+  running: boolean;
+  queue: { steering: string[]; followUp: string[] };
+  sending: boolean;
+  onSend: (text: string, mode: ComposerSubmitMode) => Promise<void>;
+  onAbort: () => void;
+  onRemoveQueued: (queue: "steering" | "followUp", text: string) => void;
+  onPromoteQueued: (text: string) => void;
+}
+
+const DRAFT_PREFIX = "omp.composer.v1.";
+const EMPTY_NOTICES: SessionSnapshot["session"]["notices"] = [];
+/** Markdown rendering is the expensive part; keep very long transcripts usable. */
+const MAX_RENDERED_MESSAGES = 200;
+
+function draftKey(sessionId: string): string {
+  return `${DRAFT_PREFIX}${sessionId}`;
+}
+
+function readDraft(sessionId: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(draftKey(sessionId)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeDraft(sessionId: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value === "") window.localStorage.removeItem(draftKey(sessionId));
+    else window.localStorage.setItem(draftKey(sessionId), value);
+  } catch {
+    // Storage may be unavailable (private mode, quota); drafts stay in memory.
+  }
 }
 
 function contextMessages(context: SessionContextPayload | undefined): ChatMessage[] {
@@ -38,44 +91,133 @@ export function ChatPane({
   snapshot,
   context,
   streamError,
+  extensionRequest,
+  extensionBusy,
+  extensionError,
+  onExtensionResponse,
   railCollapsed,
   workbenchCollapsed,
   onToggleRail,
   onToggleWorkbench,
+  models,
+  modelsLoading,
+  modelValue,
+  thinkingLevel,
+  thinkingLevels,
+  modelLoading,
+  onModelChange,
+  onThinkingChange,
+  running,
+  queue,
+  sending,
   onSend,
+  onAbort,
+  onRemoveQueued,
+  onPromoteQueued,
 }: ChatPaneProps) {
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState(false);
+  const seededFor = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
   const messages = useMemo(() => {
-    const live = snapshot?.session.messages ?? [];
-    return live.length > 0 ? live : contextMessages(context);
+    const live = snapshot?.session.messages;
+    const optimistic = snapshot?.session.optimistic;
+    if (live || optimistic) {
+      return [...(live ?? []), ...(optimistic ? [optimistic] : [])];
+    }
+    return contextMessages(context);
   }, [context, snapshot]);
+
+  // The optimistic prompt is always the tail of `messages`; it has no server
+  // entry id, so deferred thinking lookups must skip it.
+  const optimisticIndex = useMemo(() => {
+    if (!snapshot?.session.optimistic) return -1;
+    return snapshot.session.messages?.length ?? 0;
+  }, [snapshot]);
+
+  const toolResults = useMemo(() => {
+    const results = new Map<string, ChatMessage>();
+    for (const message of messages) {
+      if (message.role !== "toolResult" || typeof message.toolCallId !== "string") continue;
+      results.set(message.toolCallId, message);
+    }
+    const live = snapshot?.session.toolResults;
+    if (live) {
+      for (const [key, value] of Object.entries(live)) {
+        if (!isRecord(value) || value.role !== "toolResult") continue;
+        const callId = typeof value.toolCallId === "string" && value.toolCallId !== "" ? value.toolCallId : key;
+        results.set(callId, value as ChatMessage);
+      }
+    }
+    return results;
+  }, [messages, snapshot]);
+
+  const renderedMessages =
+    messages.length > MAX_RENDERED_MESSAGES ? messages.slice(-MAX_RENDERED_MESSAGES) : messages;
+  const messageOffset = messages.length - renderedMessages.length;
+
+  const toolCallIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const message of renderedMessages) {
+      if (message.role !== "assistant") continue;
+      for (const block of contentBlocks(message.content)) {
+        if (block.type === "toolCall" && block.toolCallId !== "") ids.add(block.toolCallId);
+      }
+    }
+    return ids;
+  }, [renderedMessages]);
+
+  const entryIdAt = (index: number): string | null => {
+    if (index === optimisticIndex) return null;
+    return snapshot?.session.entryIds?.[index] ?? context?.context?.entryIds?.[index] ?? null;
+  };
+
+  const notices = snapshot?.session.notices ?? EMPTY_NOTICES;
 
   const streamMessage = snapshot?.session.stream.active ? snapshot.session.stream.message : null;
   const connection = snapshot?.session.connection ?? (context ? "saved" : "idle");
-  const running = snapshot?.session.run.status === "running";
+  const serverDraft = snapshot?.draft.value ?? "";
 
   useEffect(() => {
-    setDraft("");
-  }, [selected]);
+    if (!selected) {
+      seededFor.current = null;
+      setDraft("");
+      return;
+    }
+    if (seededFor.current === selected) return;
+    // Mark the session before seeding: switching away from a session with an
+    // empty draft must not leave the guard on the previous id, or returning
+    // would skip the localStorage read and show an empty composer.
+    seededFor.current = selected;
+    const stored = readDraft(selected);
+    setDraft(stored !== "" ? stored : serverDraft);
+  }, [selected, serverDraft]);
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node && stick.current) node.scrollTop = node.scrollHeight;
   }, [messages.length, streamMessage]);
 
-  const submit = async () => {
-    const text = draft.trim();
-    if (!text || pending) return;
-    setPending(true);
+  const changeDraft = (value: string) => {
+    setDraft(value);
+    if (selected) {
+      seededFor.current = selected;
+      writeDraft(selected, value);
+    }
+  };
+
+  const submit = async (text: string, mode: ComposerSubmitMode): Promise<void> => {
     try {
-      await onSend(text);
-      setDraft("");
-    } finally {
-      setPending(false);
+      await onSend(text, mode);
+    } catch {
+      // Keep the draft; the stream error is rendered by the composer.
+      return;
+    }
+    setDraft("");
+    if (selected) {
+      seededFor.current = selected;
+      writeDraft(selected, "");
     }
   };
 
@@ -129,54 +271,91 @@ export function ChatPane({
       }}>
         <div className={styles.transcriptInner}>
           {messages.length === 0 ? <p className={styles.muted}>No messages yet.</p> : null}
-          {messages.slice(-200).map((message, index) => {
-            const text = messageText(message);
-            const tool = message.role === "tool" || message.role === "toolResult";
+          {messageOffset > 0 ? (
+            <p className={styles.muted}>
+              Showing the last {renderedMessages.length} of {messages.length} messages.
+            </p>
+          ) : null}
+          {renderedMessages.map((message, index) => {
+            const absoluteIndex = messageOffset + index;
+            // A tool result paired with an assistant tool call is rendered
+            // inside that call; only unpaired results get their own row.
+            if (
+              message.role === "toolResult" &&
+              typeof message.toolCallId === "string" &&
+              toolCallIds.has(message.toolCallId)
+            ) {
+              return null;
+            }
             return (
-              <article key={`${message.timestamp ?? index}-${message.role}`} className={styles.message}>
-                <span className={styles.role}>{message.role}</span>
-                {tool ? (
-                  <details className={styles.toolResult}>
-                    <summary>tool result</summary>
-                    <pre className={styles.text}>{text || "(no text content)"}</pre>
-                  </details>
-                ) : (
-                  <pre className={styles.text}>{text || "(no text content)"}</pre>
-                )}
-              </article>
+              <MessageView
+                key={`${selected ?? "none"}-${message.role}-${absoluteIndex}`}
+                message={message}
+                toolResults={toolResults}
+                sessionId={selected}
+                entryId={entryIdAt(absoluteIndex)}
+              />
             );
           })}
           {streamMessage ? (
-            <article className={styles.message}>
-              <span className={styles.role}>assistant</span>
-              <pre className={styles.text}>{messageText(streamMessage)}</pre>
-            </article>
+            <MessageView
+              key={`${selected ?? "none"}-stream`}
+              message={streamMessage}
+              toolResults={toolResults}
+              sessionId={selected}
+              streaming
+            />
           ) : null}
-          {streamError ? <p className={styles.error}>{streamError}</p> : null}
+          {notices.length > 0 ? (
+            <ul className={styles.notices}>
+              {notices.map((notice) => (
+                <li key={notice.id} className={styles.notice}>
+                  <span className={styles.noticeType}>{notice.type}</span>
+                  <span>{notice.message}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </div>
 
       <footer className={styles.composer}>
         <div className={styles.composerInner}>
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-            placeholder="Message omp…"
-            rows={3}
-            spellCheck={false}
+          {extensionRequest ? (
+            <ExtensionDialog
+              request={extensionRequest}
+              busy={extensionBusy}
+              error={extensionError}
+              onRespond={onExtensionResponse}
+            />
+          ) : null}
+          <QueuePanel
+            queue={queue}
+            pending={sending}
+            onRemove={onRemoveQueued}
+            onPromote={onPromoteQueued}
           />
-          <div className={styles.composerBar}>
-            <span className={styles.hint}>Enter to send · Shift+Enter newline</span>
-            <button className={styles.send} onClick={() => void submit()} disabled={!draft.trim() || pending}>
-              {pending ? "Sending…" : "Send"}
-            </button>
-          </div>
+          <Composer
+            value={draft}
+            onChange={changeDraft}
+            onSubmit={submit}
+            onAbort={onAbort}
+            running={running}
+            pending={sending}
+            error={streamError}
+            controls={
+              <ModelPicker
+                models={models}
+                model={modelValue}
+                thinkingLevel={thinkingLevel}
+                thinkingLevels={thinkingLevels}
+                loading={modelsLoading || modelLoading}
+                onChangeModel={onModelChange}
+                onChangeThinking={onThinkingChange}
+                allowAutoThinking
+              />
+            }
+          />
         </div>
       </footer>
     </main>

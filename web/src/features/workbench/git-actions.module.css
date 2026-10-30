@@ -1,0 +1,214 @@
+.actionsBar {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.label {
+  flex: none;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.branchSelect {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 2px 4px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.branchSelect:focus {
+  border-color: var(--accent);
+}
+
+.branchSelect:disabled {
+  opacity: 0.55;
+}
+
+.branchInput {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 2px 5px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.ghostButton,
+.miniButton {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.ghostButton:hover:not(:disabled),
+.miniButton:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.ghostButton:disabled,
+.miniButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitMessage {
+  width: 100%;
+  resize: vertical;
+  min-height: 40px;
+  max-height: 25vh;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  padding: 5px 7px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.commitMessage:focus {
+  border-color: var(--accent);
+}
+
+.commitMessage:disabled {
+  opacity: 0.55;
+}
+
+.amend {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.amend input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.hint {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  flex: none;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  padding: 2px 10px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.primaryButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.error {
+  margin: 0;
+  overflow: hidden;
+  color: var(--error);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+/* Change rows: one action button per row, never nested inside the open button. */
+.changeOpen {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.changeOpen:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.groupTitle {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupActions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.groupActions .miniButton {
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
+}

@@ -1,0 +1,88 @@
+.pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.statusBar {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.connecting {
+  background: var(--muted);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.ready {
+  background: var(--success, #4caf82);
+}
+
+.exited,
+.closed {
+  background: var(--muted);
+}
+
+.error {
+  background: var(--error);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.statusText {
+  flex: none;
+  color: var(--muted);
+}
+
+.cwd {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--muted);
+  opacity: 0.7;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  padding: 6px 8px 0 10px;
+}
+
+.terminal :global(.xterm) {
+  height: 100%;
+}
+
+.terminal :global(.xterm-viewport) {
+  background: transparent !important;
+}

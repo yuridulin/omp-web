@@ -21,6 +21,88 @@ the UI never imports `core/`, `lib/` or `server/`.
   collapsed flags persist in `omp.layout.v1`; tabs, expanded directories,
   view and scroll persist per session in `omp.workbench.v1.<sessionId>`.
 
+## Files, git & terminal
+
+- Files open in an editable Monaco editor. `Ctrl`/`Cmd`+`S` saves the buffer;
+  unsaved edits stay in memory as drafts per tab and survive tab switches and
+  closing the tab. Drafts are never persisted across reloads.
+- Dirty tabs show a small warning dot before the title.
+- The file tree toolbar can create, upload, rename, and delete files and
+  directories. Renaming a directory remaps every open tab under it; deleting a
+  file or directory closes its open tabs and drops their drafts.
+- Changes offers stage, unstage, commit, and branch actions for the working
+  tree; diffs open as read-only before/after tabs.
+- The header's `>_` button opens (or activates) the session's terminal tab for
+  the workspace root. Every terminal tab stays mounted with its PTY while you
+  switch to other tabs, so shells keep running; closing the tab closes its
+  socket. The terminal chunk loads only when the first terminal tab opens.
+
+## Transcript & extensions
+
+- Assistant text renders as markdown; thinking blocks collapse and can defer
+  their fetch until opened, using the entry id for that message (the
+  optimistic prompt never has one).
+- Tool calls render with their result when the live snapshot carries a matching
+  `toolResults` entry; paired results are not repeated as standalone rows.
+  Unpaired and partial results still render on their own. Images, bash, and
+  python executions have dedicated compact bodies.
+- The in-flight stream message renders through the same `MessageView` with a
+  streaming cursor. Snapshot notices render as dense rows at the end of the
+  transcript.
+- Blocking extension UI requests (`select`, `confirm`, `input`, `editor`,
+  `ask`) arrive on the session stream and open an inline dialog above the
+  composer. Answers (and `Escape` → `cancelled`) dispatch the
+  `extension-response` intent through the same `runIntent` path as other
+  mutations; the dialog closes only after the server accepts it and stays open
+  with the error if dispatch fails. The pending request lives in the extension
+  store, so a server `cancel` (for example when another tab answers) dismisses
+  it, and reconnect replay restores requests that are still pending.
+
+## New session & composer
+
+- The rail's `+` button opens the new-session pane: choose a workspace, an
+  optional model and thinking level, write the first prompt, and start.
+- While idle, `Enter` sends and `Shift+Enter` inserts a newline.
+- While the agent is running, `Enter` queues a follow-up and
+  `Ctrl`/`Cmd`+`Enter` steers the active turn; `Shift+Enter` still inserts a
+  newline. The same row exposes `Stop`, `Steer`, and `Queue`.
+- The model and thinking selects live in the composer. Changing either
+  dispatches the intent to the session.
+- Queued messages can be removed, and follow-ups can be promoted to steering.
+- Drafts persist per session in `localStorage` under
+  `omp.composer.v1.<sessionId>`.
+
+## System panel & notifications
+
+- The rail header's gear button (or `Ctrl`/`Cmd`+`,`) opens the system sheet on
+  the right; `Escape` and the close button dismiss it. It is a sheet, not a
+  wizard: only the active tab is mounted, so opening it queries one section
+  instead of six, and the app behind it keeps its state.
+- Tabs: `Settings` (native config plus web settings and the agent environment),
+  `Models` (catalog and model-role bindings), `Providers` (auth accounts and
+  enable/disable), `Usage` (tokens/cost by range and provider quota windows),
+  `Skills` (workspace skills, update checks, model-invocation toggle), and
+  `MCP` (config inventory, plus live session servers when a session is
+  selected).
+- Writes go straight to `/api/system/settings`, `/api/system/web-settings`,
+  `/api/system/model-roles`, `/api/system/providers/enable`,
+  `/api/system/skills` and `/api/system/mcp`. Skills can be toggled for model
+  invocation, checked for updates, and updated from their source; MCP servers
+  can be enabled/disabled from config and reloaded on the live session. Each
+  tab keeps its own save feedback and refetches the affected queries after a
+  successful write, so the composer and workbench see new values without a
+  reload.
+- The bell in the rail header shows the unread count and opens history. Opening
+  an entry marks it read and selects that entry's session; the popover also
+  hosts the prefs (enable, per-type toggles, in-app toast vs. system
+  notification while active, language), the push status and a test
+  notification.
+- Every tab reports presence to `/api/system/notifications/presence` while it
+  is visible and the user is active (idle after three minutes without input),
+  so the server only pushes to tabs someone is watching.
+- Toasts render globally above the sheet, auto-dismiss after six seconds, are
+  capped at five at a time, and click through to the session.
+
 ## Data
 
 | UI | Source |
@@ -44,3 +126,21 @@ bun run web:test
 bun run web:build
 bun run web:schema:check
 ```
+
+## End-to-end tests
+
+Playwright drives the real UI against Vite and a local API server. The API
+server is isolated: `web/e2e/start-api.ts` creates a throwaway agent directory
+and git workspace under `web/e2e/.tmp`, and replaces `OMP_WEB_OMP_BIN` with
+`web/e2e/fake-omp.ts`, a deterministic RPC stand-in. No real `omp`, model,
+network access or user config is required.
+
+```sh
+cd web
+bunx playwright install chromium   # once
+bun run e2e                       # starts API :30179 and Vite :5174
+```
+
+The specs run serially because the API server and fixture workspace are
+shared. Failures keep traces, screenshots and an HTML report under
+`web/test-results/` and `web/playwright-report/`.

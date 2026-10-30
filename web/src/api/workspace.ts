@@ -24,6 +24,24 @@ type GitFilePayload = NonNullable<
 >;
 export type GitFileContents = GitFilePayload;
 
+export type FileWriteBody = NonNullable<
+  paths["/api/workspace/files/{path}"]["put"]["requestBody"]
+>["content"]["application/json"];
+
+export type FileRenameBody = NonNullable<
+  paths["/api/workspace/files/{path}"]["patch"]["requestBody"]
+>["content"]["application/json"];
+
+export type FileDeleteQuery = NonNullable<
+  paths["/api/workspace/files/{path}"]["delete"]["parameters"]["query"]
+>;
+
+export interface UploadResult {
+  uploaded: string[];
+  skipped: string[];
+  errors: { name: string; error: string }[];
+}
+
 export interface FileEntry {
   name: string;
   isDir: boolean;
@@ -93,6 +111,102 @@ export async function fetchFileContent(filePath: string, sessionId?: string): Pr
     language: typeof body.language === "string" ? body.language : "text",
     size: typeof body.size === "number" ? body.size : body.content.length,
   };
+}
+
+export async function writeWorkspaceFile(
+  filePath: string,
+  content: string,
+): Promise<{ path: string; bytes: number }> {
+  const payload: FileWriteBody = { content, createParents: true };
+  const response = await fetch(fileApiUrl(filePath), {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await readJson(response);
+  if (!response.ok) throw new Error(errorMessage(body, response.status));
+  if (!isRecord(body)) throw new Error("Malformed file write response");
+  return {
+    path: typeof body.path === "string" ? body.path : filePath,
+    bytes: typeof body.bytes === "number" ? body.bytes : content.length,
+  };
+}
+
+export async function renameWorkspacePath(
+  from: string,
+  to: string,
+  overwrite = false,
+): Promise<{ from: string; to: string }> {
+  const payload: FileRenameBody = { to, overwrite };
+  const response = await fetch(fileApiUrl(from), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await readJson(response);
+  if (!response.ok) throw new Error(errorMessage(body, response.status));
+  if (!isRecord(body)) throw new Error("Malformed file rename response");
+  return {
+    from: typeof body.from === "string" ? body.from : from,
+    to: typeof body.to === "string" ? body.to : to,
+  };
+}
+
+export async function deleteWorkspacePath(
+  filePath: string,
+  recursive = false,
+): Promise<{ path: string }> {
+  const query: FileDeleteQuery = recursive ? { recursive: "1" } : {};
+  const response = await fetch(fileApiUrl(filePath, query.recursive ? { recursive: query.recursive } : {}), {
+    method: "DELETE",
+  });
+  const body = await readJson(response);
+  if (!response.ok) throw new Error(errorMessage(body, response.status));
+  if (!isRecord(body)) throw new Error("Malformed file delete response");
+  return { path: typeof body.path === "string" ? body.path : filePath };
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function parseUploadErrors(value: unknown): UploadResult["errors"] {
+  if (!Array.isArray(value)) return [];
+  const errors: UploadResult["errors"] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.name !== "string") continue;
+    errors.push({
+      name: entry.name,
+      error: typeof entry.error === "string" ? entry.error : "Upload failed",
+    });
+  }
+  return errors;
+}
+
+function parseUploadResult(value: unknown): UploadResult {
+  if (!isRecord(value)) return { uploaded: [], skipped: [], errors: [] };
+  return {
+    uploaded: parseStringArray(value.uploaded),
+    skipped: parseStringArray(value.skipped),
+    errors: parseUploadErrors(value.errors),
+  };
+}
+
+export async function uploadWorkspaceFiles(
+  directory: string,
+  files: File[],
+  conflict: "error" | "overwrite" | "skip" = "error",
+): Promise<UploadResult> {
+  const form = new FormData();
+  for (const file of files) form.append("files", file, file.name);
+  const response = await fetch(fileApiUrl(directory, { type: "upload", conflict }), {
+    method: "POST",
+    body: form,
+  });
+  const body = await readJson(response);
+  if (!response.ok) throw new Error(errorMessage(body, response.status));
+  return parseUploadResult(body);
 }
 
 export async function fetchProjects(): Promise<ProjectSummary[]> {

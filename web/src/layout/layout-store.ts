@@ -13,11 +13,12 @@ export interface DiffTabSource {
 
 export interface WorkbenchTab {
   id: string;
-  kind: "file" | "diff";
+  kind: "file" | "diff" | "terminal";
   path: string;
   title: string;
   preview?: boolean;
   diff?: DiffTabSource;
+  terminalCwd?: string;
   scrollTop?: number;
 }
 
@@ -148,7 +149,8 @@ function isTab(value: unknown): value is WorkbenchTab {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   if (typeof record.id !== "string" || typeof record.path !== "string" || typeof record.title !== "string") return false;
-  if (record.kind !== "file" && record.kind !== "diff") return false;
+  if (record.kind !== "file" && record.kind !== "diff" && record.kind !== "terminal") return false;
+  if (record.kind === "terminal") return typeof record.terminalCwd === "string" && record.terminalCwd.length > 0;
   if (record.kind === "diff") {
     const diff = record.diff;
     if (!diff || typeof diff !== "object" || Array.isArray(diff)) return false;
@@ -275,6 +277,11 @@ export function fileTabId(path: string): string {
   return `file:${normalizeSlashes(path)}`;
 }
 
+export function terminalTabId(cwd: string): string {
+  const normalized = normalizeSlashes(cwd);
+  return `terminal:${normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized}`;
+}
+
 function shortRev(rev: string): string {
   if (rev === "WORKTREE") return "working";
   if (rev === "INDEX") return "index";
@@ -289,6 +296,47 @@ export function diffTabTitle(source: DiffTabSource): string {
 
 export function diffTabId(source: DiffTabSource): string {
   return `diff:${source.kind}:${normalizeSlashes(source.cwd)}:${source.from}:${source.to}:${normalizeSlashes(source.path)}`;
+}
+
+function trimmedPath(value: string): string {
+  const normalized = normalizeSlashes(value);
+  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
+}
+
+function isPathOrChild(path: string, base: string): boolean {
+  return path === base || path.startsWith(`${base}/`);
+}
+
+export interface RenamedFileTab {
+  fromId: string;
+  toId: string;
+}
+
+/** Remap open file tabs after a file or directory rename. Returns old/new tab id pairs. */
+export function renameFileTabs(sessionId: string, from: string, to: string): RenamedFileTab[] {
+  const fromPath = trimmedPath(from);
+  const toPath = trimmedPath(to);
+  const pairs: RenamedFileTab[] = [];
+  if (!fromPath || !toPath || fromPath === toPath) return pairs;
+  updateWorkbenchContext(sessionId, (context) => {
+    let changed = false;
+    const tabs = context.tabs.map((tab) => {
+      if (tab.kind !== "file") return tab;
+      const tabPath = trimmedPath(tab.path);
+      if (!isPathOrChild(tabPath, fromPath)) return tab;
+      const nextPath = `${toPath}${tabPath.slice(fromPath.length)}`;
+      const toId = fileTabId(nextPath);
+      if (!pairs.some((pair) => pair.fromId === tab.id && pair.toId === toId)) {
+        pairs.push({ fromId: tab.id, toId });
+      }
+      changed = true;
+      return { ...tab, id: toId, path: nextPath, title: basename(nextPath) };
+    });
+    if (!changed) return context;
+    const activePair = pairs.find((pair) => pair.fromId === context.activeTabId);
+    return { ...context, tabs, activeTabId: activePair ? activePair.toId : context.activeTabId };
+  });
+  return pairs;
 }
 
 export function openFileTab(sessionId: string, path: string, preview = false): void {
@@ -329,6 +377,21 @@ export function openDiffTab(sessionId: string, source: DiffTabSource): void {
   });
 }
 
+export function openTerminalTab(sessionId: string, cwd: string): void {
+  const id = terminalTabId(cwd);
+  updateWorkbenchContext(sessionId, (context) => {
+    if (context.tabs.some((tab) => tab.id === id)) return { ...context, activeTabId: id };
+    const tab: WorkbenchTab = {
+      id,
+      kind: "terminal",
+      path: cwd,
+      title: basename(cwd) || cwd,
+      terminalCwd: cwd,
+    };
+    return { ...context, tabs: [...context.tabs, tab].slice(-MAX_TABS), activeTabId: id };
+  });
+}
+
 export function setActiveTab(sessionId: string, tabId: string): void {
   updateWorkbenchContext(sessionId, (context) => (
     context.tabs.some((tab) => tab.id === tabId) ? { ...context, activeTabId: tabId } : context
@@ -345,6 +408,32 @@ export function closeTab(sessionId: string, tabId: string): void {
       : context.activeTabId;
     return { ...context, tabs, activeTabId };
   });
+}
+
+/**
+ * Close every file/diff tab for a deleted file or directory.
+ * Terminal tabs are left alone; returns the ids that were closed.
+ */
+export function closeTabsForPath(sessionId: string, path: string): string[] {
+  const base = trimmedPath(path);
+  const closed: string[] = [];
+  if (!base) return closed;
+  updateWorkbenchContext(sessionId, (context) => {
+    let tabs = context.tabs;
+    let activeTabId = context.activeTabId;
+    for (const tab of context.tabs) {
+      if (tab.kind === "terminal") continue;
+      if (!isPathOrChild(trimmedPath(tab.path), base)) continue;
+      closed.push(tab.id);
+      // Mirror closeTab: the active tab falls to the neighbour at its index.
+      const index = tabs.findIndex((candidate) => candidate.id === tab.id);
+      tabs = tabs.filter((candidate) => candidate.id !== tab.id);
+      if (activeTabId === tab.id) activeTabId = tabs[Math.min(index, tabs.length - 1)]?.id ?? null;
+    }
+    if (closed.length === 0) return context;
+    return { ...context, tabs, activeTabId };
+  });
+  return closed;
 }
 
 export function setTabScroll(sessionId: string, tabId: string, scrollTop: number): void {
