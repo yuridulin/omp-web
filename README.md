@@ -30,9 +30,21 @@ is the single public barrel.
 ## Run
 
 ```
-bun start                 # http://127.0.0.1:30178
+bun run app               # build the UI if needed, serve it, open the browser
+bun start                 # serve API + the existing web/dist build, no browser
 OMP_WEB_HOST=0.0.0.0 OMP_WEB_PORT=8080 bun start
 ```
+
+`bun run app` is the normal launch: it builds `web/dist` when it is missing,
+starts the Bun server on `http://127.0.0.1:30178/`, and opens the default
+browser. On Windows, double-click `omp-web.cmd` (it runs the same command); for
+a desktop shortcut, point it at that file. Set `OMP_WEB_OPEN=0` to skip opening
+the browser and `OMP_WEB_PORT` to change the port.
+
+The same server serves the SPA and the API; no second process is needed.
+`bun start` expects `web/dist` to exist (`bun run web:build`), and
+`OMP_WEB_STATIC_DIR` overrides the directory. Unknown client routes return
+`index.html`; missing `/assets/*` files stay 404s.
 
 Endpoints are grouped by domain:
 
@@ -57,6 +69,8 @@ bun run typecheck   # tsc --noEmit
 bun run contract    # regenerate contract/open-api.yaml from route contracts
 bun run contract:check
 
+bun run dev         # API under --watch + Vite in one process
+bun run dev:api     # API only, for a separately started Vite
 bun run web:dev     # Vite UI on http://127.0.0.1:5173 (proxies /api)
 bun run web:schema  # regenerate web/src/api/schema.d.ts from the contract
 bun run web:test

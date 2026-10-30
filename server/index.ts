@@ -7,6 +7,7 @@ import { validateRequest } from "./request-contract.ts";
 import { crossOriginRejection } from "./cross-origin.ts";
 import { isRecord } from "../core/guards.ts";
 import { createTerminal, TerminalError, type TerminalSession } from "../lib/terminal.ts";
+import { serveStatic } from "./static.ts";
 
 /**
  * Minimal Bun.serve server for the omp API.
@@ -316,63 +317,83 @@ function sameOrigin(request: Request): boolean {
   }
 }
 
-async function main(): Promise<void> {
-  const host = process.env.OMP_WEB_HOST || "127.0.0.1";
-  const port = Number(process.env.OMP_WEB_PORT || process.env.PORT || 30178);
+export interface StartServerOptions {
+  host?: string;
+  port?: number;
+  /** Directory with the built SPA; defaults to `web/dist` or `OMP_WEB_STATIC_DIR`. */
+  staticRoot?: string;
+}
+
+export interface StartedServer {
+  server: Bun.Server<TerminalSocketData>;
+  routes: number;
+  url: URL;
+}
+
+export async function startServer(options: StartServerOptions = {}): Promise<StartedServer> {
+  const host = options.host ?? process.env.OMP_WEB_HOST ?? "127.0.0.1";
+  const port = options.port ?? Number(process.env.OMP_WEB_PORT || process.env.PORT || 30178);
+  const staticRoot =
+    options.staticRoot ?? process.env.OMP_WEB_STATIC_DIR ?? fileURLToPath(new URL("../web/dist", import.meta.url));
   const routes = collectRoutes();
-  try {
-    await preloadRouteModules(routes);
-  } catch (error) {
-    console.error(error);
-    process.exit(1);
-  }
-  try {
-    const server = Bun.serve<TerminalSocketData>({
-      hostname: host,
-      port,
-      // Bun closes idle streams after 10 s; /api/events heartbeats every 30 s.
-      idleTimeout: 0,
-      fetch: (request, server) => {
-        if (new URL(request.url).pathname === TERMINAL_PATH) {
-          if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
-            return json(
-              { error: "WebSocket upgrade required", code: "upgrade_required" },
-              { status: 426 },
-            );
-          }
-          if (!sameOrigin(request)) {
-            return json(
-              { error: "Cross-origin WebSocket rejected", code: "cross_origin" },
-              { status: 403 },
-            );
-          }
-          const upgraded = server.upgrade(request, {
-            data: { terminal: null, creating: false },
-          });
-          return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+  await preloadRouteModules(routes);
+  const server = Bun.serve<TerminalSocketData>({
+    hostname: host,
+    port,
+    // Bun closes idle streams after 10 s; /api/events heartbeats every 30 s.
+    idleTimeout: 0,
+    fetch: async (request, server) => {
+      const { pathname } = new URL(request.url);
+      if (pathname === TERMINAL_PATH) {
+        if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+          return json(
+            { error: "WebSocket upgrade required", code: "upgrade_required" },
+            { status: 426 },
+          );
         }
-        return dispatch(request, routes);
+        if (!sameOrigin(request)) {
+          return json(
+            { error: "Cross-origin WebSocket rejected", code: "cross_origin" },
+            { status: 403 },
+          );
+        }
+        const upgraded = server.upgrade(request, {
+          data: { terminal: null, creating: false },
+        });
+        return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+      }
+      if (!pathname.startsWith("/api")) {
+        const asset = await serveStatic(staticRoot, request);
+        if (asset) return asset;
+      }
+      return dispatch(request, routes);
+    },
+    websocket: {
+      maxPayloadLength: 1024 * 1024,
+      idleTimeout: 0,
+      message(ws, message) {
+        void handleTerminalMessage(ws, message);
       },
-      websocket: {
-        maxPayloadLength: 1024 * 1024,
-        idleTimeout: 0,
-        message(ws, message) {
-          void handleTerminalMessage(ws, message);
-        },
-        close(ws) {
-          ws.data.terminal?.kill();
-          ws.data.terminal = null;
-        },
+      close(ws) {
+        ws.data.terminal?.kill();
+        ws.data.terminal = null;
       },
-      error(error) {
-        console.error(error);
-        return json({
-          error: error instanceof Error ? error.message : String(error),
-          code: "internal_error",
-        }, { status: 500 });
-      },
-    });
-    console.log(`omp api listening on ${server.url} (${routes.length} routes)`);
+    },
+    error(error) {
+      console.error(error);
+      return json({
+        error: error instanceof Error ? error.message : String(error),
+        code: "internal_error",
+      }, { status: 500 });
+    },
+  });
+  return { server, routes: routes.length, url: server.url };
+}
+
+async function main(): Promise<void> {
+  try {
+    const { routes, url } = await startServer();
+    console.log(`omp web listening on ${url} (${routes} routes)`);
   } catch (error) {
     console.error(error);
     process.exit(1);
