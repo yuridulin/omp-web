@@ -20,7 +20,7 @@ export default defineConfig({
     proxy: {
       // The Bun server owns HTTP and SSE; the UI never imports its code.
       "/api": {
-        target: "http://127.0.0.1:30178",
+        target: process.env.OMP_WEB_API_TARGET ?? "http://127.0.0.1:30178",
         changeOrigin: false,
         ws: true,
       },
@@ -33,5 +33,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     restoreMocks: true,
+    // Playwright specs live under e2e/; Vitest must not collect them.
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });

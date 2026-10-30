@@ -60,4 +60,12 @@ bun run web:test
 bun run web:build
 ```
 
+End-to-end coverage lives in `web/e2e` and runs against an isolated API server
+plus a fake `omp` RPC process; no real agent install or model is needed:
+
+```
+bun run web:e2e:install   # once: downloads Chromium
+bun run web:e2e
+```
+
 Requires Bun 1.4.4+.

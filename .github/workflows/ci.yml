@@ -22,3 +22,7 @@ jobs:
       - run: bun run web:test
       - run: bun run web:build
       - run: bun run test
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+        working-directory: web
+      - run: bun run web:e2e

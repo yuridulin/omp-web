@@ -31,3 +31,6 @@ Desktop.ini
 # local tooling
 .tmp/
 tmp/
+/web/e2e/.tmp/
+/web/test-results/
+/web/playwright-report/

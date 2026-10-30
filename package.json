@@ -24,6 +24,8 @@
     "web:dev": "bun --cwd=web run dev",
     "web:build": "bun --cwd=web run build",
     "web:test": "bun --cwd=web run test",
+    "web:e2e": "bun --cwd=web run e2e",
+    "web:e2e:install": "bun --cwd=web run e2e:install",
     "web:typecheck": "bun --cwd=web run typecheck",
     "web:schema": "bun --cwd=web run schema",
     "web:schema:check": "bun --cwd=web run schema:check"
