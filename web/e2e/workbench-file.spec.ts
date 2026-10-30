@@ -14,6 +14,14 @@ test("opens a workspace file, edits it in Monaco and saves it with the keyboard"
   const editor = page.locator(".monaco-editor").first();
   await expect(editor).toBeVisible();
 
+  // The workbench section must stretch inside its fixed-width pane; otherwise
+  // Monaco collapses to its min-content width and leaves a dead strip.
+  const paneBox = await page.getByTestId("workbench-pane").boundingBox();
+  const editorBox = await editor.boundingBox();
+  expect(paneBox).not.toBeNull();
+  expect(editorBox).not.toBeNull();
+  expect(Math.abs(paneBox!.x + paneBox!.width - (editorBox!.x + editorBox!.width))).toBeLessThanOrEqual(1);
+
   await editor.click();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.insertText(nextContent);

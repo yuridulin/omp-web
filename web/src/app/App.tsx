@@ -419,7 +419,7 @@ export function App() {
               onDelta={(delta) => updateLayout({ workbenchWidth: layout.workbenchWidth - delta })}
               onReset={() => updateLayout({ workbenchWidth: 720 })}
             />
-            <div className={styles.workbenchPane} style={{ width: layout.workbenchWidth }}>
+            <div className={styles.workbenchPane} data-testid="workbench-pane" style={{ width: layout.workbenchWidth }}>
               <Workbench
                 sessionId={selected}
                 primaryRoot={root}
