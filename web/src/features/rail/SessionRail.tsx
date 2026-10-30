@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { basename, comparablePath } from "@/api/paths";
 import type { ProjectSummary, SessionSummary } from "@/api/workspace";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
+import { toggleTheme, useTheme } from "@/state/theme";
 import styles from "./session-rail.module.css";
 
 interface SessionRailProps {
@@ -74,6 +75,7 @@ export function SessionRail({
 }: SessionRailProps) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const theme = useTheme();
 
   const groups = useMemo(() => {
     const map = new Map<string, ProjectGroup>();
@@ -166,6 +168,14 @@ export function SessionRail({
         <span className={styles.brand}>omp</span>
         <div className={styles.headerActions}>
           <NotificationBell />
+          <button
+            className={styles.iconButton}
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            {theme === "dark" ? "☀" : "☾"}
+          </button>
           <button
             className={styles.iconButton}
             onClick={onOpenSettings}

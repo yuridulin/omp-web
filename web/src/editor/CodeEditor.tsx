@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import type * as Monaco from "monaco-editor";
 import type { LspDiagnostic } from "@/api/lsp";
 import type { InlineSelection } from "@/features/workbench/inline-edit";
+import { useTheme } from "@/state/theme";
 import { markersFromDiagnostics } from "./lsp-markers";
-import { setupMonaco } from "./monaco";
+import { monacoTheme, setupMonaco } from "./monaco";
 import styles from "./editor.module.css";
 
 interface CodeEditorProps {
@@ -33,6 +34,7 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const theme = useTheme();
   const scrollRef = useRef(onScroll);
   const changeRef = useRef(onChange);
   const saveRef = useRef(onSave);
@@ -50,11 +52,11 @@ export function CodeEditor({
   useEffect(() => {
     const node = host.current;
     if (!node) return;
-    const monaco = setupMonaco();
+    const monaco = setupMonaco(theme);
     const editor = monaco.editor.create(node, {
       value,
       language,
-      theme: "omp-dark",
+      theme: monacoTheme(theme),
       readOnly,
       domReadOnly: readOnly,
       automaticLayout: true,
@@ -132,6 +134,10 @@ export function CodeEditor({
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly, domReadOnly: readOnly });
   }, [readOnly]);
+
+  useEffect(() => {
+    if (editorRef.current) setupMonaco(theme);
+  }, [theme]);
 
   useEffect(() => {
     const editor = editorRef.current;

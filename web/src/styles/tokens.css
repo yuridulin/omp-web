@@ -1,14 +1,50 @@
+/*
+ * Light is the default theme; dark is selected through `data-theme="dark"` on
+ * <html>. Components only consume these variables so a theme can change the
+ * palette (and, later, the layout) without touching feature CSS.
+ */
+
 :root {
-  --bg: #0d0f12;
-  --surface: #14171c;
-  --surface-2: #1b1f26;
-  --border: #262b33;
-  --fg: #d7dce3;
-  --muted: #7f8996;
-  --accent: #7aa2f7;
-  --success: #9ece6a;
-  --warning: #e0af68;
-  --error: #f7768e;
+  color-scheme: light;
+
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Segoe UI Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --border: #e0e2e6;
+  --fg: #1f2328;
+  --muted: #6a737d;
+  --accent: #2f6feb;
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --error: #cf222e;
+
+  --shadow-1: 0 6px 18px rgb(31 35 40 / 12%);
+  --shadow-2: 0 10px 30px rgb(31 35 40 / 16%);
+  --shadow-color: rgb(31 35 40 / 18%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #111214;
+  --surface: #17181b;
+  --surface-2: #1e2024;
+  --border: #2c2f36;
+  --fg: #e6e7ea;
+  --muted: #8b909a;
+  --accent: #6ea8fe;
+  --success: #4ac26b;
+  --warning: #d29922;
+  --error: #f85149;
+
+  --shadow-1: 0 6px 18px rgb(0 0 0 / 35%);
+  --shadow-2: 0 10px 30px rgb(0 0 0 / 45%);
+  --shadow-color: rgb(0 0 0 / 45%);
 }
 
 * {
@@ -22,11 +58,26 @@ body,
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
 }
 
 button,
-textarea {
+input,
+textarea,
+select {
   font: inherit;
   color: inherit;
 }

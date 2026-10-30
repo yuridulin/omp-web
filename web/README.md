@@ -21,6 +21,11 @@ the UI never imports `core/`, `lib/` or `server/`.
 - A session starts with its workspace root; the `+` button adds any registered
   project as another root. Each root has its own tree, git count, and terminal
   button; removing a non-primary root closes the tabs that only lived under it.
+- Light is the default theme; the rail's moon/sun button toggles dark and the
+  choice persists in `omp.theme.v1`. Monaco, xterm and every panel read the
+  `tokens.css` variables, so adding a theme does not touch feature CSS.
+- Typography is sans for chrome and chat, mono only for code, paths, diffs and
+  the terminal.
 - Dividers resize the rail, workbench, and file navigator. Widths and
   collapsed flags persist in `omp.layout.v1`; tabs, expanded directories,
   view and scroll persist per session in `omp.workbench.v1.<sessionId>`.

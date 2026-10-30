@@ -107,7 +107,7 @@
   border-radius: 4px;
   background: var(--surface);
   padding: 3px;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+  box-shadow: var(--shadow-1);
 }
 
 .addRootItem {
@@ -407,7 +407,7 @@
 
 .tabMarker {
   color: var(--accent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 

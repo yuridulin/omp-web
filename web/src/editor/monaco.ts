@@ -24,29 +24,51 @@ interface MonacoEnvironment {
 
 let themeReady = false;
 
-export function setupMonaco(): typeof monaco {
+export function monacoTheme(mode: "light" | "dark"): "omp-light" | "omp-dark" {
+  return mode === "dark" ? "omp-dark" : "omp-light";
+}
+
+export function setupMonaco(mode?: "light" | "dark"): typeof monaco {
   if (!themeReady) {
+    monaco.editor.defineTheme("omp-light", {
+      base: "vs",
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": "#ffffff",
+        "editor.foreground": "#1f2328",
+        "editorLineNumber.foreground": "#8c959f",
+        "editorLineNumber.activeForeground": "#1f2328",
+        "editor.selectionBackground": "#b6d7ff",
+        "editor.lineHighlightBackground": "#f6f8fa",
+        "editorGutter.background": "#ffffff",
+        "diffEditor.insertedTextBackground": "#1a7f3722",
+        "diffEditor.removedTextBackground": "#cf222e22",
+        "diffEditor.insertedLineBackground": "#1a7f3714",
+        "diffEditor.removedLineBackground": "#cf222e14",
+      },
+    });
     monaco.editor.defineTheme("omp-dark", {
       base: "vs-dark",
       inherit: true,
       rules: [],
       colors: {
-        "editor.background": "#0d0f12",
-        "editor.foreground": "#d7dce3",
-        "editorLineNumber.foreground": "#4b5563",
-        "editorLineNumber.activeForeground": "#9aa4b2",
+        "editor.background": "#111214",
+        "editor.foreground": "#e6e7ea",
+        "editorLineNumber.foreground": "#6e7681",
+        "editorLineNumber.activeForeground": "#c9d1d9",
         "editor.selectionBackground": "#2b3a55",
-        "editor.lineHighlightBackground": "#14171c",
-        "editorGutter.background": "#0d0f12",
-        "diffEditor.insertedTextBackground": "#9ece6a22",
-        "diffEditor.removedTextBackground": "#f7768e22",
-        "diffEditor.insertedLineBackground": "#9ece6a14",
-        "diffEditor.removedLineBackground": "#f7768e14",
+        "editor.lineHighlightBackground": "#17181b",
+        "editorGutter.background": "#111214",
+        "diffEditor.insertedTextBackground": "#4ac26b22",
+        "diffEditor.removedTextBackground": "#f8514922",
+        "diffEditor.insertedLineBackground": "#4ac26b14",
+        "diffEditor.removedLineBackground": "#f8514914",
       },
     });
-    monaco.editor.setTheme("omp-dark");
     themeReady = true;
   }
+  if (mode) monaco.editor.setTheme(monacoTheme(mode));
   return monaco;
 }
 

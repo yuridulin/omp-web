@@ -10,7 +10,7 @@
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: -12px 0 32px rgb(0 0 0 / 45%);
+  box-shadow: -12px 0 32px var(--shadow-color);
   color: var(--fg);
   outline: none;
 }

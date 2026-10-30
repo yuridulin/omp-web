@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { setupMonaco } from "./monaco";
+import { useTheme } from "@/state/theme";
+import { monacoTheme, setupMonaco } from "./monaco";
 import styles from "./editor.module.css";
 
 interface DiffEditorProps {
@@ -10,6 +11,11 @@ interface DiffEditorProps {
 
 export function DiffEditor({ original, modified, language }: DiffEditorProps) {
   const host = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
+
+  useEffect(() => {
+    setupMonaco(theme);
+  }, [theme]);
 
   useEffect(() => {
     const node = host.current;
@@ -18,7 +24,7 @@ export function DiffEditor({ original, modified, language }: DiffEditorProps) {
     const originalModel = monaco.editor.createModel(original, language);
     const modifiedModel = monaco.editor.createModel(modified, language);
     const editor = monaco.editor.createDiffEditor(node, {
-      theme: "omp-dark",
+      theme: monacoTheme(theme),
       readOnly: true,
       originalEditable: false,
       automaticLayout: true,

@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { parseTerminalFrame, terminalSocketUrl } from "./terminal-protocol";
+import { useTheme } from "@/state/theme";
 import styles from "./terminal.module.css";
 
 interface TerminalViewProps {
@@ -17,8 +18,26 @@ type TerminalStatus =
   | { kind: "error"; label: string }
   | { kind: "closed"; label: string };
 
+function terminalStyle(node: HTMLElement): { fontFamily: string; theme: Record<string, string> } {
+  const computed = getComputedStyle(node);
+  const token = (name: string, fallback: string): string => {
+    const value = computed.getPropertyValue(name).trim();
+    return value.length > 0 ? value : fallback;
+  };
+  return {
+    fontFamily: token("--font-mono", "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"),
+    theme: {
+      background: token("--bg", "#111214"),
+      foreground: token("--fg", "#e6e7ea"),
+      cursor: token("--accent", "#6ea8fe"),
+      cursorAccent: token("--bg", "#111214"),
+    },
+  };
+}
+
 export function TerminalView({ cwd, active }: TerminalViewProps) {
   const host = useRef<HTMLDivElement | null>(null);
+  const mode = useTheme();
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -27,28 +46,27 @@ export function TerminalView({ cwd, active }: TerminalViewProps) {
 
   useEffect(() => {
     const node = host.current;
+    const terminal = terminalRef.current;
+    if (!node || !terminal) return;
+    const style = terminalStyle(node);
+    terminal.options.fontFamily = style.fontFamily;
+    terminal.options.theme = style.theme;
+  }, [mode]);
+
+  useEffect(() => {
+    const node = host.current;
     if (!node) return;
     let disposed = false;
     readyRef.current = false;
     setStatus({ kind: "connecting", label: "Connecting…" });
 
-    const computed = getComputedStyle(node);
-    const token = (name: string, fallback: string): string => {
-      const value = computed.getPropertyValue(name).trim();
-      return value.length > 0 ? value : fallback;
-    };
-
+    const style = terminalStyle(node);
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 12,
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace",
+      fontFamily: style.fontFamily,
       scrollback: 5000,
-      theme: {
-        background: token("--bg", "#0f1115"),
-        foreground: token("--fg", "#d7dae0"),
-        cursor: token("--accent", "#7aa2f7"),
-        cursorAccent: token("--bg", "#0f1115"),
-      },
+      theme: style.theme,
     });
     const fit = new FitAddon();
     terminal.loadAddon(fit);

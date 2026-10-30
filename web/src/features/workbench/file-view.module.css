@@ -33,6 +33,7 @@
   flex: 1;
   overflow: hidden;
   color: var(--muted);
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
