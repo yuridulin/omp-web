@@ -2,22 +2,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { relativePath } from "@/api/paths";
 import type { DiffTabSource } from "@/layout/layout-store";
 import type { GitFileStatus, GitStatus } from "@/api/workspace";
+import type { ChangesSlotProps } from "@/slots/changes";
 import { GitActions } from "./GitActions";
-import { useGitWrite } from "./use-git-write";
-import styles from "./workbench.module.css";
+import styles from "./changes-list.module.css";
 import gitStyles from "./git-actions.module.css";
-
-interface ChangesListProps {
-  root: string;
-  label?: string;
-  status: GitStatus | undefined;
-  loading: boolean;
-  error: string | null;
-  scrollTop: number;
-  onOpen: (source: DiffTabSource) => void;
-  onRefresh: () => void;
-  onScroll: (scrollTop: number) => void;
-}
 
 export interface ChangeGroup {
   id: string;
@@ -107,30 +95,38 @@ export function ChangesList({
   loading,
   error,
   scrollTop,
+  pending,
+  writeError,
+  branches,
+  currentBranch,
+  branchesLoading,
+  branchesError,
   onOpen,
   onRefresh,
   onScroll,
-}: ChangesListProps) {
+  onStage,
+  onUnstage,
+  onStageAll,
+  onUnstageAll,
+  onCommit,
+  onCheckout,
+  onCreateBranch,
+}: ChangesSlotProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const groups = useMemo(() => groupChanges(status), [status]);
-  const gitWrite = useGitWrite(root);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = scrollTop;
   }, []);
 
-  // The git routes validate repo-relative POSIX paths; status rows carry
-  // absolute paths, so strip the workspace root before calling them.
-  const toRepoPaths = (paths: string[]) => paths.map((path) => relativePath(path, root));
-
   const stagePaths = (paths: string[]) => {
     if (paths.length === 0) return;
-    void gitWrite.stage(toRepoPaths(paths)).catch(() => {});
+    onStage(paths);
   };
 
   const unstagePaths = (paths: string[]) => {
     if (paths.length === 0) return;
-    void gitWrite.unstage(toRepoPaths(paths)).catch(() => {});
+    onUnstage(paths);
   };
 
   return (
@@ -145,25 +141,18 @@ export function ChangesList({
       {status?.isGitRepository === false ? null : (
         <div className={gitStyles.actionsBar}>
           <GitActions
-            root={root}
             status={status}
-            pending={gitWrite.pending}
-            error={gitWrite.error}
-            onStageAll={() => {
-              void gitWrite.stageAll().catch(() => {});
-            }}
-            onUnstageAll={() => {
-              void gitWrite.unstageAll().catch(() => {});
-            }}
-            onCommit={async (message, amend) => {
-              await gitWrite.commit(message, amend);
-            }}
-            onCheckout={async (branch) => {
-              await gitWrite.checkout(branch);
-            }}
-            onCreateBranch={async (name) => {
-              await gitWrite.createBranch(name);
-            }}
+            pending={pending}
+            error={writeError}
+            branches={branches}
+            currentBranch={currentBranch}
+            branchesLoading={branchesLoading}
+            branchesError={branchesError}
+            onStageAll={onStageAll}
+            onUnstageAll={onUnstageAll}
+            onCommit={onCommit}
+            onCheckout={onCheckout}
+            onCreateBranch={onCreateBranch}
           />
         </div>
       )}
@@ -185,7 +174,7 @@ export function ChangesList({
                   {targets.stage.length > 0 ? (
                     <button
                       className={gitStyles.miniButton}
-                      disabled={gitWrite.pending}
+                      disabled={pending}
                       onClick={() => stagePaths(targets.stage)}
                       title={`Stage all ${targets.stage.length} file(s) in ${group.label}`}
                     >
@@ -195,7 +184,7 @@ export function ChangesList({
                   {targets.unstage.length > 0 ? (
                     <button
                       className={gitStyles.miniButton}
-                      disabled={gitWrite.pending}
+                      disabled={pending}
                       onClick={() => unstagePaths(targets.unstage)}
                       title={`Unstage all ${targets.unstage.length} file(s) in ${group.label}`}
                     >
@@ -217,7 +206,7 @@ export function ChangesList({
                   </button>
                   <button
                     className={gitStyles.miniButton}
-                    disabled={gitWrite.pending}
+                    disabled={pending}
                     onClick={() => {
                       if (rowAction === "stage") stagePaths([file.filePath]);
                       else unstagePaths([file.filePath]);

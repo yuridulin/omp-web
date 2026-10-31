@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { clearLspRoot, setLspDiagnostics } from "@/state/lsp-store";
+import { afterEach, describe, expect, it } from "vitest";
+import type { LspDiagnostic } from "@/api/lsp";
+import type { LspDocumentState } from "@/state/lsp-store";
 import { ProblemsList } from "./ProblemsList";
 
 const diagnostic = {
@@ -9,24 +10,30 @@ const diagnostic = {
   severity: 1,
 } as const;
 
-beforeEach(() => clearLspRoot("/repo"));
+function document(path: string, diagnostics: LspDiagnostic[]): LspDocumentState {
+  return { root: "/repo", path, server: null, available: true, version: 1, diagnostics };
+}
+
 afterEach(cleanup);
 
 describe("ProblemsList", () => {
   it("lists only documents with diagnostics", () => {
-    setLspDiagnostics("/repo", "/repo/clean.ts", [], null);
-    setLspDiagnostics("/repo", "/repo/bad.ts", [diagnostic], 1);
-
-    render(<ProblemsList roots={["/repo"]} onOpen={() => {}} />);
+    render(
+      <ProblemsList
+        documents={[
+          document("/repo/clean.ts", []),
+          document("/repo/bad.ts", [diagnostic]),
+        ]}
+        onOpen={() => {}}
+      />,
+    );
 
     expect(screen.getByText("bad.ts")).toBeTruthy();
     expect(screen.queryByText("clean.ts")).toBeNull();
   });
 
   it("shows the empty state when every open document is clean", () => {
-    setLspDiagnostics("/repo", "/repo/clean.ts", [], null);
-
-    render(<ProblemsList roots={["/repo"]} onOpen={() => {}} />);
+    render(<ProblemsList documents={[document("/repo/clean.ts", [])]} onOpen={() => {}} />);
 
     expect(screen.getByText("No problems.")).toBeTruthy();
   });

@@ -1,0 +1,35 @@
+.body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.terminalArea {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.status {
+  padding: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.empty {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 11px;
+}

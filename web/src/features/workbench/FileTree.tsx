@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { comparablePath, dirname, joinPath } from "@/api/paths";
 import type { GitFileStatus } from "@/api/workspace";
@@ -10,8 +10,8 @@ const MAX_ENTRIES = 500;
 
 interface FileTreeProps {
   sessionId: string;
-  roots: string[];
-  expanded: string[];
+  roots: readonly string[];
+  expanded: readonly string[];
   /** Keyed by `comparablePath(root)`. */
   gitFilesByRoot: ReadonlyMap<string, readonly GitFileStatus[]>;
   scrollTop: number;
@@ -22,6 +22,7 @@ interface FileTreeProps {
   onDeleted?: (path: string) => void;
   onRemoveRoot?: (root: string) => void;
   onOpenTerminal?: (root: string) => void;
+  onDragStartFile?: (event: DragEvent<HTMLDivElement>, path: string, root: string) => void;
 }
 
 interface TreeOps {
@@ -57,6 +58,7 @@ export function FileTree({
   onDeleted,
   onRemoveRoot,
   onOpenTerminal,
+  onDragStartFile,
 }: FileTreeProps) {
   const treeRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -275,6 +277,7 @@ export function FileTree({
               </div>
               <DirectoryList
                 path={root}
+                root={root}
                 depth={0}
                 sessionId={sessionId}
                 expanded={expanded}
@@ -284,6 +287,7 @@ export function FileTree({
                 ops={ops}
                 {...(onRenamed ? { onRenamed } : {})}
                 {...(onDeleted ? { onDeleted } : {})}
+                {...(onDragStartFile ? { onDragStartFile } : {})}
               />
             </section>
           );
@@ -295,19 +299,22 @@ export function FileTree({
 
 interface DirectoryListProps {
   path: string;
+  root: string;
   depth: number;
   sessionId: string;
-  expanded: string[];
+  expanded: readonly string[];
   gitByPath: Map<string, GitFileStatus>;
   onToggle: (path: string) => void;
   onOpen: (path: string, preview: boolean) => void;
   ops: TreeOps;
   onRenamed?: (from: string, to: string) => void;
   onDeleted?: (path: string) => void;
+  onDragStartFile?: (event: DragEvent<HTMLDivElement>, path: string, root: string) => void;
 }
 
 function DirectoryList({
   path,
+  root,
   depth,
   sessionId,
   expanded,
@@ -317,6 +324,7 @@ function DirectoryList({
   ops,
   onRenamed,
   onDeleted,
+  onDragStartFile,
 }: DirectoryListProps) {
   const query = useFileList(path, sessionId);
   if (query.isLoading) return <div className={styles.treeStatus}>Loading…</div>;
@@ -335,6 +343,7 @@ function DirectoryList({
               <TreeRow
                 fullPath={fullPath}
                 name={entry.name}
+                root={root}
                 isDir
                 open={open}
                 depth={depth}
@@ -343,10 +352,12 @@ function DirectoryList({
                 ops={ops}
                 {...(onRenamed ? { onRenamed } : {})}
                 {...(onDeleted ? { onDeleted } : {})}
+                {...(onDragStartFile ? { onDragStartFile } : {})}
               />
               {open ? (
                 <DirectoryList
                   path={fullPath}
+                  root={root}
                   depth={depth + 1}
                   sessionId={sessionId}
                   expanded={expanded}
@@ -356,6 +367,7 @@ function DirectoryList({
                   ops={ops}
                   {...(onRenamed ? { onRenamed } : {})}
                   {...(onDeleted ? { onDeleted } : {})}
+                  {...(onDragStartFile ? { onDragStartFile } : {})}
                 />
               ) : null}
             </Fragment>
@@ -367,6 +379,7 @@ function DirectoryList({
             key={fullPath}
             fullPath={fullPath}
             name={entry.name}
+            root={root}
             isDir={false}
             depth={depth}
             onToggle={onToggle}
@@ -375,6 +388,7 @@ function DirectoryList({
             {...(status ? { status } : {})}
             {...(onRenamed ? { onRenamed } : {})}
             {...(onDeleted ? { onDeleted } : {})}
+            {...(onDragStartFile ? { onDragStartFile } : {})}
           />
         );
       })}
@@ -390,6 +404,7 @@ type RowMode = "idle" | "rename" | "confirm";
 interface TreeRowProps {
   fullPath: string;
   name: string;
+  root: string;
   isDir: boolean;
   open?: boolean;
   status?: GitFileStatus;
@@ -399,11 +414,13 @@ interface TreeRowProps {
   ops: TreeOps;
   onRenamed?: (from: string, to: string) => void;
   onDeleted?: (path: string) => void;
+  onDragStartFile?: (event: DragEvent<HTMLDivElement>, path: string, root: string) => void;
 }
 
 function TreeRow({
   fullPath,
   name,
+  root,
   isDir,
   open = false,
   status,
@@ -413,6 +430,7 @@ function TreeRow({
   ops,
   onRenamed,
   onDeleted,
+  onDragStartFile,
 }: TreeRowProps) {
   const [mode, setMode] = useState<RowMode>("idle");
   const [draftName, setDraftName] = useState(name);
@@ -488,7 +506,12 @@ function TreeRow({
   }
 
   return (
-    <div className={styles.treeRow} style={indent}>
+    <div
+      className={styles.treeRow}
+      style={indent}
+      draggable={!isDir}
+      onDragStart={isDir ? undefined : (event) => onDragStartFile?.(event, fullPath, root)}
+    >
       <button
         className={styles.treeMain}
         onClick={() => (isDir ? onToggle(fullPath) : onOpen(fullPath, true))}

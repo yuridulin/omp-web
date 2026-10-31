@@ -1,0 +1,130 @@
+.treeStatus {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.treeError {
+  padding: 6px 10px;
+  color: var(--error);
+  font-size: 10px;
+}
+
+.badge {
+  display: inline-grid;
+  min-width: 13px;
+  height: 13px;
+  place-items: center;
+  border-radius: 3px;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.badgeModified { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.badgeAdded { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.badgeDeleted { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); }
+.badgeConflict { background: color-mix(in srgb, var(--error) 24%, transparent); color: var(--error); }
+.badgeRenamed { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.badgeUntracked { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+
+.changes {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.changesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.changesLabel {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: 10px;
+}
+
+.changesCount {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.smallButton {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 5px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.smallButton:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.changesScroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.changeGroup {
+  margin-bottom: 6px;
+}
+
+.changeGroupLabel {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.changeGroupLabel span {
+  color: var(--muted);
+}
+
+.changeRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 3px 8px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.changeRow:hover {
+  background: var(--surface-2);
+}
+
+.changePath {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changeReason {
+  color: var(--muted);
+  font-size: 9px;
+}

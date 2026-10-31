@@ -9,8 +9,11 @@ test("starts a session from the new-session pane and survives a reload", async (
   const reply = `E2E response: ${prompt}`;
 
   await page.goto("/");
-  await page.getByRole("button", { name: "New session" }).click();
+  // New sessions are created from a project header, seeded with that root.
+  const projectRow = page.getByTitle(env.workspace, { exact: true }).locator("..");
+  await projectRow.getByRole("button", { name: /^New session in / }).click();
   await expect(page.getByRole("heading", { name: "New session" })).toBeVisible();
+  await expect(page.getByLabel("Workspace path")).toHaveValue(env.workspace);
 
   await page.getByLabel("Workspace path").fill(env.workspace);
   await page.getByLabel("Message").fill(prompt);

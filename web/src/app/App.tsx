@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   createSession,
   dispatchIntent,
@@ -9,28 +9,51 @@ import {
   type ModelEntry,
 } from "@/api/agent";
 import { basename, comparablePath } from "@/api/paths";
-import type { SessionSummary } from "@/api/workspace";
+import { fetchGitStatus, type SessionSummary } from "@/api/workspace";
+import type { DragPayload } from "@/drag/payload";
+import { NewSessionPane, type NewSessionInputView } from "@/features/chat/NewSessionPane";
 import { useProjects } from "@/features/projects/use-projects";
 import { useModels } from "@/features/sessions/use-models";
 import { useSessionModel } from "@/features/sessions/use-session-model";
 import { useSessions } from "@/features/sessions/use-sessions";
-import { SessionRail } from "@/features/rail/SessionRail";
-import { ChatPane } from "@/features/chat/ChatPane";
-import { NewSessionPane, type NewSessionInputView } from "@/features/chat/NewSessionPane";
-import type { ComposerSubmitMode } from "@/features/chat/Composer";
-import { Workbench } from "@/features/workbench/Workbench";
-import { useSessionContext } from "@/features/workbench/use-workbench-data";
 import { SystemPanel } from "@/features/system/SystemPanel";
-import { ensureWorkbenchRoots, updateLayout } from "@/layout/layout-store";
+import { useSessionContext } from "@/features/workbench/use-workbench-data";
+import { forgetEditorTab, renameEditorTab } from "@/features/workbench/editor-state";
+import { ChangesControl } from "@/features/workbench/ChangesControl";
+import {
+  addWorkbenchRoot,
+  closeTab,
+  closeTabsForPath,
+  ensureWorkbenchRoots,
+  openDiffTab,
+  openFileTab,
+  openTerminalTab,
+  removeWorkbenchRoot,
+  renameFileTabs,
+  setActiveTab,
+  setChangesScroll,
+  setTabScroll,
+  setTreeScroll,
+  setWorkbenchView,
+  toggleExpanded,
+  updateLayout,
+  type WorkbenchView,
+} from "@/layout/layout-store";
 import { ResizeHandle } from "@/layout/ResizeHandle";
 import { useLayout, useWorkbench } from "@/layout/use-layout";
+import { skinFor } from "@/skins/registry";
+import type { ComposerSubmitMode } from "@/slots/chat";
+import type { FilesGitState } from "@/slots/files";
+import { appendComposerDraft } from "@/state/composer-store";
+import { useAppearance } from "@/state/use-appearance";
 import { useRunningSessions, useSessionStream, useWorkspaceEvents } from "@/state/event-stream";
-import { NotificationProvider } from "@/state/notification-center";
 import {
   clearExtensionRequest,
   useExtensionRequest,
   type ExtensionResponse,
 } from "@/state/extension-store";
+import { useAllDiagnostics } from "@/state/lsp-store";
+import { NotificationProvider } from "@/state/notification-center";
 import { useSessionSnapshot } from "@/state/use-session-snapshot";
 import styles from "./app.module.css";
 
@@ -73,6 +96,7 @@ interface PendingSession {
 export function App() {
   const queryClient = useQueryClient();
   const layout = useLayout();
+  const appearance = useAppearance();
   const sessions = useSessions();
   const projects = useProjects();
   const modelsQuery = useModels();
@@ -146,8 +170,40 @@ export function App() {
   const running = useRunningSessions(fallbackRunning);
   const agentRunning = snapshot?.session.run.status === "running";
   const { error: streamError } = useSessionStream(selected, streamRevision);
-  const workbenchRoots = useWorkbench(selected).roots;
+  const workbench = useWorkbench(selected);
+  const workbenchRoots = workbench.roots;
   useWorkspaceEvents(workbenchRoots);
+
+  // Git status belongs to the shell: the files skin receives ready states and
+  // never runs its own queries.
+  const gitQueries = useQueries({
+    queries: workbenchRoots.map((root) => ({
+      queryKey: ["git-status", root],
+      queryFn: () => fetchGitStatus(root),
+      enabled: Boolean(selected) && !newSession && !layout.workbenchCollapsed,
+      staleTime: 3_000,
+      refetchInterval: 10_000,
+    })),
+  });
+  const gitByRoot = useMemo(() => {
+    const states = new Map<string, FilesGitState>();
+    workbenchRoots.forEach((root, index) => {
+      const query = gitQueries[index];
+      states.set(comparablePath(root), {
+        status: query?.data,
+        loading: query?.isLoading ?? false,
+        error: query?.isError ? query.error.message : null,
+      });
+    });
+    return states;
+  }, [gitQueries, workbenchRoots]);
+  const problems = useAllDiagnostics(workbenchRoots);
+  const availableProjects = useMemo(
+    () => (projects.data ?? []).filter(
+      (project) => !workbenchRoots.some((root) => comparablePath(root) === comparablePath(project.path)),
+    ),
+    [projects.data, workbenchRoots],
+  );
 
   useEffect(() => {
     if (selected && root) ensureWorkbenchRoots(selected, root);
@@ -262,8 +318,12 @@ export function App() {
     window.history.replaceState(null, "", `?session=${encodeURIComponent(sessionId)}`);
   };
 
-  const openNewSession = () => {
-    const seed = pendingSession?.cwd ?? listedSession?.cwd ?? listedSession?.projectRoot ?? null;
+  const openNewSession = (projectPath?: string) => {
+    const seed = projectPath
+      ?? pendingSession?.cwd
+      ?? listedSession?.cwd
+      ?? listedSession?.projectRoot
+      ?? null;
     setNewSessionSeedCwd(seed);
     setNewSession(true);
     setCreateError(null);
@@ -313,13 +373,21 @@ export function App() {
 
   const toggleRail = () => updateLayout({ railCollapsed: !layout.railCollapsed });
   const toggleWorkbench = () => updateLayout({ workbenchCollapsed: !layout.workbenchCollapsed });
+  const openNewSessionRef = useRef(openNewSession);
+  openNewSessionRef.current = openNewSession;
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
       const target = event.target as HTMLElement | null;
-      const editing = target?.closest("input, textarea, [contenteditable=true]");
+      const editing = target?.closest("input, textarea, select, [contenteditable=true]");
       if (editing) return;
+      if (!(event.ctrlKey || event.metaKey)) {
+        if (event.key.toLowerCase() === "n" && !event.altKey && !event.shiftKey) {
+          event.preventDefault();
+          openNewSessionRef.current();
+        }
+        return;
+      }
       if (event.key.toLowerCase() === "b" && !event.shiftKey) {
         event.preventDefault();
         updateLayout({ railCollapsed: !layout.railCollapsed });
@@ -340,13 +408,32 @@ export function App() {
     void queryClient.invalidateQueries({ queryKey: ["projects"] });
   };
 
+  const handleDropPayload = (payload: DragPayload): void => {
+    if (!selected || payload.kind !== "file") return;
+    appendComposerDraft(selected, payload.path);
+  };
+
+  const refreshGit = (root: string): void => {
+    const index = workbenchRoots.findIndex((entry) => comparablePath(entry) === comparablePath(root));
+    if (index < 0) return;
+    void gitQueries[index]?.refetch();
+  };
+
+  const openWorkbenchFileAt = (path: string, line: number, column: number): void => {
+    if (selected) openFileTab(selected, path, false, { line, column });
+  };
+
+  const RailSkin = skinFor("rail", appearance);
+  const ChatSkin = skinFor("chat", appearance);
+  const FilesSkin = skinFor("files", appearance);
+
   return (
     <NotificationProvider sessionId={selected} onSelectSession={selectSession}>
       <div className={styles.shell}>
         {!layout.railCollapsed ? (
           <>
             <div className={styles.railPane} style={{ width: layout.railWidth }}>
-              <SessionRail
+              <RailSkin
                 sessions={sessions.data?.sessions ?? []}
                 projects={projects.data ?? []}
                 selected={selected}
@@ -380,7 +467,7 @@ export function App() {
             onCreate={createAndStart}
           />
         ) : (
-          <ChatPane
+          <ChatSkin
             session={session}
             selected={selected}
             snapshot={snapshot}
@@ -390,10 +477,6 @@ export function App() {
             extensionBusy={extensionBusy}
             extensionError={extensionError}
             onExtensionResponse={handleExtensionResponse}
-            railCollapsed={layout.railCollapsed}
-            workbenchCollapsed={layout.workbenchCollapsed}
-            onToggleRail={toggleRail}
-            onToggleWorkbench={toggleWorkbench}
             models={models?.modelList ?? EMPTY_MODELS}
             modelsLoading={modelsQuery.isLoading}
             modelValue={modelValue}
@@ -409,6 +492,7 @@ export function App() {
             onAbort={handleAbort}
             onRemoveQueued={handleRemoveQueued}
             onPromoteQueued={handlePromoteQueued}
+            onDropPayload={handleDropPayload}
           />
         )}
 
@@ -420,11 +504,49 @@ export function App() {
               onReset={() => updateLayout({ workbenchWidth: 720 })}
             />
             <div className={styles.workbenchPane} data-testid="workbench-pane" style={{ width: layout.workbenchWidth }}>
-              <Workbench
+              <FilesSkin
                 sessionId={selected}
                 primaryRoot={root}
                 projectLabel={projectLabel}
+                roots={workbenchRoots}
+                view={workbench.view}
+                expanded={workbench.expanded}
+                tabs={workbench.tabs}
+                activeTabId={workbench.activeTabId}
+                treeScrollTop={workbench.treeScrollTop}
+                changesScrollTop={workbench.changesScrollTop}
+                navigatorWidth={layout.navigatorWidth}
+                navigatorCollapsed={layout.navigatorCollapsed}
+                gitByRoot={gitByRoot}
+                problems={problems}
+                availableProjects={availableProjects}
+                ChangesView={ChangesControl}
                 onClose={toggleWorkbench}
+                onSelectView={(view: WorkbenchView) => setWorkbenchView(selected, view)}
+                onToggleExpanded={(path) => toggleExpanded(selected, path)}
+                onOpenFile={(path, preview) => openFileTab(selected, path, preview)}
+                onOpenFileAt={openWorkbenchFileAt}
+                onOpenTerminal={(terminalRoot) => openTerminalTab(selected, terminalRoot)}
+                onAddRoot={(workspaceRoot) => addWorkbenchRoot(selected, workspaceRoot)}
+                onRemoveRoot={(workspaceRoot) => {
+                  for (const id of removeWorkbenchRoot(selected, workspaceRoot)) forgetEditorTab(id);
+                }}
+                onRenamed={(from, to) => {
+                  for (const pair of renameFileTabs(selected, from, to)) renameEditorTab(pair.fromId, pair.toId);
+                }}
+                onDeleted={(path) => {
+                  for (const id of closeTabsForPath(selected, path)) forgetEditorTab(id);
+                }}
+                onTreeScroll={(scrollTop) => setTreeScroll(selected, scrollTop)}
+                onChangesScroll={(scrollTop) => setChangesScroll(selected, scrollTop)}
+                onRefreshGit={refreshGit}
+                onOpenDiff={(source) => openDiffTab(selected, source)}
+                onActivateTab={(tabId) => setActiveTab(selected, tabId)}
+                onCloseTab={(tabId) => closeTab(selected, tabId)}
+                onTabScroll={(tabId, scrollTop) => setTabScroll(selected, tabId, scrollTop)}
+                onToggleNavigator={() => updateLayout({ navigatorCollapsed: !layout.navigatorCollapsed })}
+                onResizeNavigator={(delta) => updateLayout({ navigatorWidth: layout.navigatorWidth + delta })}
+                onResetNavigator={() => updateLayout({ navigatorWidth: 220 })}
                 onInlinePrompt={async (text) => {
                   if (!selected) throw new Error("Select a session first.");
                   await runIntent(selected, { kind: "prompt", text });
@@ -432,6 +554,28 @@ export function App() {
               />
             </div>
           </>
+        ) : null}
+
+        {layout.railCollapsed ? (
+          <button
+            type="button"
+            className={styles.showRail}
+            onClick={toggleRail}
+            title="Show sessions"
+            aria-label="Show sessions"
+          >
+            ☰
+          </button>
+        ) : null}
+        {!newSession && layout.workbenchCollapsed && selected ? (
+          <button
+            type="button"
+            className={styles.showWorkbench}
+            onClick={toggleWorkbench}
+            title="Show workbench (Ctrl+Shift+E)"
+          >
+            Panel
+          </button>
         ) : null}
       </div>
 

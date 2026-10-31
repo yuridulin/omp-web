@@ -1,16 +1,16 @@
 import { relativePath } from "@/api/paths";
-import { useAllDiagnostics } from "@/state/lsp-store";
+import type { LspDocumentState } from "@/state/lsp-store";
 import styles from "./problems-list.module.css";
 
 const SEVERITY_LABEL: Record<number, string> = { 1: "E", 2: "W", 3: "I", 4: "H" };
 
 interface ProblemsListProps {
-  roots: readonly string[];
+  documents: readonly LspDocumentState[];
   onOpen: (path: string, line: number) => void;
 }
 
-export function ProblemsList({ roots, onOpen }: ProblemsListProps) {
-  const documents = useAllDiagnostics(roots).filter((document) => document.diagnostics.length > 0);
+export function ProblemsList({ documents: all, onOpen }: ProblemsListProps) {
+  const documents = all.filter((document) => document.diagnostics.length > 0);
   const total = documents.reduce((sum, document) => sum + document.diagnostics.length, 0);
 
   if (total === 0) {

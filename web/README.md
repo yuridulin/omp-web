@@ -30,6 +30,28 @@ the UI never imports `core/`, `lib/` or `server/`.
   collapsed flags persist in `omp.layout.v1`; tabs, expanded directories,
   view and scroll persist per session in `omp.workbench.v1.<sessionId>`.
 
+## Slots, skins & appearance
+
+- `src/slots/` contains prop contracts only: `rail`, `chat`, `files`,
+  `changes`, and the non-skin `editor` area. A slot component gets ready data
+  and callbacks, so skins never fetch, import another slot's HTML, or import
+  another slot's CSS module.
+- `src/skins/dsh/` is the current visual variant, one folder per slot. The
+  registry in `src/skins/registry.ts` maps `slot + variant id` to a component;
+  `App.tsx` resolves every panel through it.
+- The shell composes the workbench columns and passes a changes-slot
+  controller into the files skin; the controller resolves the chosen changes
+  variant and owns its git actions. Adding a variant never edits another skin.
+- Appearance is client-only: `omp.appearance.v1` stores a preset plus explicit
+  per-slot ids. `System` → `View` edits it; the preset fills every slot and an
+  explicit choice overrides one slot. Nothing is sent to `/api/system/*`.
+- `src/state/composer-store.ts` owns `omp.composer.v1.<sessionId>`; every chat
+  variant reads and writes the same draft.
+- `src/drag/payload.ts` is the drag boundary. Skins write a `DragPayload`
+  (`session`, `file`, `text`) to the `DataTransfer`; the parser is total and
+  returns `null` for garbage. Dropping a file from the tree onto the composer
+  appends its path to the shared draft.
+
 ## Files, git & terminal
 
 - Files open in an editable Monaco editor. `Ctrl`/`Cmd`+`S` saves the buffer;
@@ -76,8 +98,8 @@ the UI never imports `core/`, `lib/` or `server/`.
 
 ## New session & composer
 
-- The rail's `+` button opens the new-session pane: choose a workspace, an
-  optional model and thinking level, write the first prompt, and start.
+- Each project header has a `+` button that opens the new-session pane seeded
+  with that project root. `N` still opens the pane from the current session.
 - While idle, `Enter` sends and `Shift+Enter` inserts a newline.
 - While the agent is running, `Enter` queues a follow-up and
   `Ctrl`/`Cmd`+`Enter` steers the active turn; `Shift+Enter` still inserts a
@@ -93,13 +115,13 @@ the UI never imports `core/`, `lib/` or `server/`.
 - The rail header's gear button (or `Ctrl`/`Cmd`+`,`) opens the system sheet on
   the right; `Escape` and the close button dismiss it. It is a sheet, not a
   wizard: only the active tab is mounted, so opening it queries one section
-  instead of six, and the app behind it keeps its state.
+  instead of seven, and the app behind it keeps its state.
 - Tabs: `Settings` (native config plus web settings and the agent environment),
-  `Models` (catalog and model-role bindings), `Providers` (auth accounts and
-  enable/disable), `Usage` (tokens/cost by range and provider quota windows),
-  `Skills` (workspace skills, update checks, model-invocation toggle), and
-  `MCP` (config inventory, plus live session servers when a session is
-  selected).
+  `View` (client-only preset and per-slot skin ids), `Models` (catalog and
+  model-role bindings), `Providers` (auth accounts and enable/disable), `Usage`
+  (tokens/cost by range and provider quota windows), `Skills` (workspace
+  skills, update checks, model-invocation toggle), and `MCP` (config inventory,
+  plus live session servers when a session is selected).
 - Writes go straight to `/api/system/settings`, `/api/system/web-settings`,
   `/api/system/model-roles`, `/api/system/providers/enable`,
   `/api/system/skills` and `/api/system/mcp`. Skills can be toggled for model

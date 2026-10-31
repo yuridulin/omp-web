@@ -1,4 +1,6 @@
-import { basename, comparablePath, isAbsolutePath, isPathWithin, normalizeSlashes } from "@/api/paths";
+import { basename, comparablePath, isAbsolutePath, isPathWithin, normalizeSlashes, rootForPath } from "@/api/paths";
+import { closeLspDocument } from "@/api/lsp";
+import { removeLspDiagnostics } from "@/state/lsp-store";
 
 export type WorkbenchView = "files" | "changes" | "problems";
 
@@ -247,12 +249,51 @@ function emitWorkbench(sessionId: string, immediate = true, emit = true): void {
   if (emit) for (const listener of workbenchListeners) listener();
 }
 
+/**
+ * The server owns language-server documents. Closing or moving a file tab must
+ * close the document under its old root; that lifecycle lives beside the tab
+ * model so no skin has to observe tab removals.
+ */
+const openDocuments = new Map<string, Map<string, string | null>>();
+
+function documentsFor(context: WorkbenchContext): Map<string, string | null> {
+  const documents = new Map<string, string | null>();
+  for (const tab of context.tabs) {
+    if (tab.kind !== "file") continue;
+    documents.set(tab.path, rootForPath(context.roots, tab.path));
+  }
+  return documents;
+}
+
+function syncEditorDocuments(sessionId: string, previous: WorkbenchContext, next: WorkbenchContext): void {
+  if (previous.tabs === next.tabs && previous.roots === next.roots) return;
+  let open = openDocuments.get(sessionId);
+  if (!open) {
+    // Seed from the state before the mutation; the first close in a fresh page
+    // must still close the document that was open.
+    open = documentsFor(previous);
+    openDocuments.set(sessionId, open);
+  }
+  const current = documentsFor(next);
+  for (const [path, root] of open) {
+    if (!root) continue;
+    const nextRoot = current.get(path) ?? null;
+    if (nextRoot && comparablePath(nextRoot) === comparablePath(root)) continue;
+    void closeLspDocument({ root, path }).catch(() => {});
+    removeLspDiagnostics(root, path);
+  }
+  openDocuments.set(sessionId, current);
+}
+
 export function updateWorkbenchContext(
   sessionId: string,
   updater: (context: WorkbenchContext) => WorkbenchContext,
   options: { immediate?: boolean; emit?: boolean } = {},
 ): void {
-  contexts.set(sessionId, updater(getWorkbenchContext(sessionId)));
+  const previous = getWorkbenchContext(sessionId);
+  const next = updater(previous);
+  contexts.set(sessionId, next);
+  syncEditorDocuments(sessionId, previous, next);
   emitWorkbench(sessionId, options.immediate ?? true, options.emit ?? true);
 }
 
@@ -520,6 +561,7 @@ export function setTabScroll(sessionId: string, tabId: string, scrollTop: number
 export function resetLayoutForTests(): void {
   layout = { ...DEFAULT_LAYOUT };
   contexts.clear();
+  openDocuments.clear();
   layoutListeners.clear();
   workbenchListeners.clear();
   for (const timer of saveTimers.values()) clearTimeout(timer);

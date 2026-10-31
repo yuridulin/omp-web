@@ -14,21 +14,6 @@ vi.mock("@/api/client", () => ({
   },
 }));
 
-vi.mock("./use-git-write", () => ({
-  useGitBranches: () => ({
-    data: {
-      current: "main",
-      branches: [
-        { name: "main", head: "aaa111", current: true },
-        { name: "dev", head: "bbb222", current: false },
-      ],
-    },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-}));
-
 import type { GitStatus } from "@/api/workspace";
 import { checkoutGit, commitGit, fetchGitBranches, stageGit, unstageGit } from "@/api/git-write";
 import { GitActions, type GitActionsProps } from "./GitActions";
@@ -136,10 +121,16 @@ describe("git write api", () => {
 
 function makeProps(overrides: Partial<GitActionsProps> = {}): GitActionsProps {
   return {
-    root: "D:/repo",
     status: emptyStatus,
     pending: false,
     error: null,
+    branches: [
+      { name: "main", head: "aaa111", current: true },
+      { name: "dev", head: "bbb222", current: false },
+    ],
+    currentBranch: "main",
+    branchesLoading: false,
+    branchesError: null,
     onStageAll: vi.fn(),
     onUnstageAll: vi.fn(),
     onCommit: vi.fn(async () => {}),

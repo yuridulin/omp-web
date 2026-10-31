@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
+import { AppearancePanel } from "./AppearancePanel";
 import { McpPanel } from "./McpPanel";
 import { ModelsPanel } from "./ModelsPanel";
 import { ProvidersPanel } from "./ProvidersPanel";
@@ -8,10 +9,11 @@ import { SkillsPanel } from "./SkillsPanel";
 import { UsagePanel } from "./UsagePanel";
 import styles from "./system-panel.module.css";
 
-type SystemTab = "settings" | "models" | "providers" | "usage" | "skills" | "mcp";
+type SystemTab = "settings" | "appearance" | "models" | "providers" | "usage" | "skills" | "mcp";
 
 const TABS: readonly { id: SystemTab; label: string }[] = [
   { id: "settings", label: "Settings" },
+  { id: "appearance", label: "View" },
   { id: "models", label: "Models" },
   { id: "providers", label: "Providers" },
   { id: "usage", label: "Usage" },
@@ -96,6 +98,7 @@ export function SystemPanel({ root, sessionId, onClose }: SystemPanelProps): JSX
         aria-labelledby={`system-tab-${tab}`}
       >
         {tab === "settings" ? <SettingsForm /> : null}
+        {tab === "appearance" ? <AppearancePanel /> : null}
         {tab === "models" ? <ModelsPanel /> : null}
         {tab === "providers" ? <ProvidersPanel /> : null}
         {tab === "usage" ? <UsagePanel /> : null}

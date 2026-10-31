@@ -1,76 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ModelEntry } from "@/api/agent";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { isRecord } from "@/api/guards";
 import { basename } from "@/api/paths";
 import type { ChatMessage, SessionSnapshot } from "@/api/session-types";
-import type { SessionContextPayload, SessionSummary } from "@/api/workspace";
-import type { ExtensionRequest, ExtensionResponse } from "@/state/extension-store";
-import { Composer, type ComposerSubmitMode } from "./Composer";
-import { ExtensionDialog } from "./ExtensionDialog";
-import { MessageView } from "./MessageView";
-import { ModelPicker } from "./ModelPicker";
-import { QueuePanel } from "./QueuePanel";
-import { contentBlocks } from "./transcript";
-import styles from "./chat-pane.module.css";
+import type { SessionContextPayload } from "@/api/workspace";
+import { readDragPayload } from "@/drag/payload";
+import { Composer } from "@/features/chat/Composer";
+import { ExtensionDialog } from "@/features/chat/ExtensionDialog";
+import { MessageView } from "@/features/chat/MessageView";
+import { ModelPicker } from "@/features/chat/ModelPicker";
+import { QueuePanel } from "@/features/chat/QueuePanel";
+import { contentBlocks } from "@/features/chat/transcript";
+import { composerUsageStats, formatTokens } from "@/features/chat/composer-stats";
+import { CacheIcon, StepsIcon, TokensIcon, TurnsIcon } from "@/features/chat/icons";
+import type { ChatSlotProps, ComposerSubmitMode } from "@/slots/chat";
+import { seedComposerDraft, setComposerDraft } from "@/state/composer-store";
+import { useComposerDraft } from "@/state/use-composer-draft";
+import styles from "./chat.module.css";
 
-interface ChatPaneProps {
-  session: SessionSummary | null;
-  selected: string | null;
-  snapshot: SessionSnapshot | null;
-  context: SessionContextPayload | undefined;
-  streamError: string | null;
-  extensionRequest: ExtensionRequest | null;
-  extensionBusy: boolean;
-  extensionError: string | null;
-  onExtensionResponse: (response: ExtensionResponse) => void | Promise<void>;
-  railCollapsed: boolean;
-  workbenchCollapsed: boolean;
-  onToggleRail: () => void;
-  onToggleWorkbench: () => void;
-  models: ModelEntry[];
-  modelsLoading: boolean;
-  modelValue: { provider: string; modelId: string } | null;
-  thinkingLevel: string;
-  thinkingLevels: string[];
-  modelLoading: boolean;
-  onModelChange: (provider: string, modelId: string) => void;
-  onThinkingChange: (level: string) => void;
-  running: boolean;
-  queue: { steering: string[]; followUp: string[] };
-  sending: boolean;
-  onSend: (text: string, mode: ComposerSubmitMode) => Promise<void>;
-  onAbort: () => void;
-  onRemoveQueued: (queue: "steering" | "followUp", text: string) => void;
-  onPromoteQueued: (text: string) => void;
-}
-
-const DRAFT_PREFIX = "omp.composer.v1.";
 const EMPTY_NOTICES: SessionSnapshot["session"]["notices"] = [];
 /** Markdown rendering is the expensive part; keep very long transcripts usable. */
 const MAX_RENDERED_MESSAGES = 200;
-
-function draftKey(sessionId: string): string {
-  return `${DRAFT_PREFIX}${sessionId}`;
-}
-
-function readDraft(sessionId: string): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(draftKey(sessionId)) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeDraft(sessionId: string, value: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (value === "") window.localStorage.removeItem(draftKey(sessionId));
-    else window.localStorage.setItem(draftKey(sessionId), value);
-  } catch {
-    // Storage may be unavailable (private mode, quota); drafts stay in memory.
-  }
-}
 
 function contextMessages(context: SessionContextPayload | undefined): ChatMessage[] {
   const raw = context?.context?.messages;
@@ -78,14 +27,18 @@ function contextMessages(context: SessionContextPayload | undefined): ChatMessag
   return raw
     .filter(isRecord)
     .filter((message) => typeof message.role === "string")
-    .map((message) => ({
-      role: message.role as string,
-      content: message.content,
-      ...(typeof message.timestamp === "number" ? { timestamp: message.timestamp } : {}),
-    }));
+    .map((message) => {
+      const { role, content, timestamp, ...rest } = message;
+      return {
+        ...rest,
+        role: role as string,
+        content,
+        ...(typeof timestamp === "number" ? { timestamp } : {}),
+      };
+    });
 }
 
-export function ChatPane({
+export function ChatSkin({
   session,
   selected,
   snapshot,
@@ -95,10 +48,6 @@ export function ChatPane({
   extensionBusy,
   extensionError,
   onExtensionResponse,
-  railCollapsed,
-  workbenchCollapsed,
-  onToggleRail,
-  onToggleWorkbench,
   models,
   modelsLoading,
   modelValue,
@@ -114,9 +63,10 @@ export function ChatPane({
   onAbort,
   onRemoveQueued,
   onPromoteQueued,
-}: ChatPaneProps) {
-  const [draft, setDraft] = useState("");
-  const seededFor = useRef<string | null>(null);
+  onDropPayload,
+}: ChatSlotProps) {
+  const draft = useComposerDraft(selected);
+  const [dropActive, setDropActive] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -156,6 +106,7 @@ export function ChatPane({
   const renderedMessages =
     messages.length > MAX_RENDERED_MESSAGES ? messages.slice(-MAX_RENDERED_MESSAGES) : messages;
   const messageOffset = messages.length - renderedMessages.length;
+  const usageStats = useMemo(() => composerUsageStats(messages), [messages]);
 
   const toolCallIds = useMemo(() => {
     const ids = new Set<string>();
@@ -180,18 +131,8 @@ export function ChatPane({
   const serverDraft = snapshot?.draft.value ?? "";
 
   useEffect(() => {
-    if (!selected) {
-      seededFor.current = null;
-      setDraft("");
-      return;
-    }
-    if (seededFor.current === selected) return;
-    // Mark the session before seeding: switching away from a session with an
-    // empty draft must not leave the guard on the previous id, or returning
-    // would skip the localStorage read and show an empty composer.
-    seededFor.current = selected;
-    const stored = readDraft(selected);
-    setDraft(stored !== "" ? stored : serverDraft);
+    if (!selected) return;
+    seedComposerDraft(selected, serverDraft);
   }, [selected, serverDraft]);
 
   useEffect(() => {
@@ -200,11 +141,7 @@ export function ChatPane({
   }, [messages.length, streamMessage]);
 
   const changeDraft = (value: string) => {
-    setDraft(value);
-    if (selected) {
-      seededFor.current = selected;
-      writeDraft(selected, value);
-    }
+    if (selected) setComposerDraft(selected, value);
   };
 
   const submit = async (text: string, mode: ComposerSubmitMode): Promise<void> => {
@@ -214,11 +151,26 @@ export function ChatPane({
       // Keep the draft; the stream error is rendered by the composer.
       return;
     }
-    setDraft("");
-    if (selected) {
-      seededFor.current = selected;
-      writeDraft(selected, "");
-    }
+    if (selected) setComposerDraft(selected, "");
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLElement>): void => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDropActive(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>): void => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+    setDropActive(false);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>): void => {
+    event.preventDefault();
+    setDropActive(false);
+    const payload = readDragPayload(event.dataTransfer);
+    if (payload) onDropPayload(payload);
   };
 
   if (!selected) {
@@ -226,7 +178,6 @@ export function ChatPane({
       <main className={styles.chat}>
         <header className={styles.header}>
           <div className={styles.headerLeft}>
-            {railCollapsed ? <button className={styles.iconButton} onClick={onToggleRail} title="Show sessions">☰</button> : null}
             <span className={styles.title}>No session</span>
           </div>
         </header>
@@ -245,7 +196,6 @@ export function ChatPane({
     <main className={styles.chat}>
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          {railCollapsed ? <button className={styles.iconButton} onClick={onToggleRail} title="Show sessions">☰</button> : null}
           <div className={styles.heading}>
             <span className={styles.title}>{title}</span>
             <span className={styles.subtitle}>
@@ -253,15 +203,6 @@ export function ChatPane({
               <span className={running ? styles.running : styles.connection}>{running ? "agent running" : connection}</span>
             </span>
           </div>
-        </div>
-        <div className={styles.headerRight}>
-          {workbenchCollapsed ? (
-            <button className={styles.panelButton} onClick={onToggleWorkbench} title="Show workbench (Ctrl+Shift+E)">
-              Panel
-            </button>
-          ) : (
-            <button className={styles.iconButton} onClick={onToggleWorkbench} title="Hide workbench (Ctrl+Shift+E)">×</button>
-          )}
         </div>
       </header>
 
@@ -319,7 +260,12 @@ export function ChatPane({
         </div>
       </div>
 
-      <footer className={styles.composer}>
+      <footer
+        className={dropActive ? `${styles.composer} ${styles.composerDrop}` : styles.composer}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className={styles.composerInner}>
           {extensionRequest ? (
             <ExtensionDialog
@@ -354,6 +300,36 @@ export function ChatPane({
                 onChangeThinking={onThinkingChange}
                 allowAutoThinking
               />
+            }
+            status={
+              usageStats.turns > 0 || usageStats.steps > 0 || usageStats.tokens > 0 ? (
+                <>
+                  {usageStats.turns > 0 ? (
+                    <span className={styles.stat}>
+                      <TurnsIcon size={12} />
+                      {usageStats.turns} {usageStats.turns === 1 ? "turn" : "turns"}
+                    </span>
+                  ) : null}
+                  {usageStats.steps > 0 ? (
+                    <span className={styles.stat}>
+                      <StepsIcon size={12} />
+                      {usageStats.steps} {usageStats.steps === 1 ? "step" : "steps"}
+                    </span>
+                  ) : null}
+                  {usageStats.tokens > 0 ? (
+                    <span className={styles.stat}>
+                      <TokensIcon size={12} />
+                      {formatTokens(usageStats.tokens)} tok
+                    </span>
+                  ) : null}
+                  {usageStats.cacheHit !== null ? (
+                    <span className={styles.stat}>
+                      <CacheIcon size={12} />
+                      Cache hit {usageStats.cacheHit}%
+                    </span>
+                  ) : null}
+                </>
+              ) : undefined
             }
           />
         </div>

@@ -85,7 +85,8 @@ export function FileView({
   }, [serverContent, tabId]);
 
   // Open the document once per (root, path, language). The server keeps it open
-  // until Workbench sees the tab disappear, so FileView unmounts are harmless.
+  // until the layout store sees the tab disappear, so FileView unmounts are
+  // harmless.
   useEffect(() => {
     if (!root || !language || query.data === undefined) return;
     const key = `${root}\0${path}\0${language}`;

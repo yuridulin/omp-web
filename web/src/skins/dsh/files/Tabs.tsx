@@ -1,9 +1,9 @@
 import type { WorkbenchTab } from "@/layout/layout-store";
-import { useDirtyTabIds } from "./editor-state";
-import styles from "./workbench.module.css";
+import { useDirtyTabIds } from "@/features/workbench/editor-state";
+import styles from "./files.module.css";
 
 interface TabsProps {
-  tabs: WorkbenchTab[];
+  tabs: readonly WorkbenchTab[];
   activeTabId: string | null;
   onActivate: (tabId: string) => void;
   onClose: (tabId: string) => void;

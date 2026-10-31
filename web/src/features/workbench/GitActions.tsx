@@ -1,13 +1,16 @@
 import { useState } from "react";
+import type { GitBranch } from "@/api/git-write";
 import type { GitStatus } from "@/api/workspace";
-import { useGitBranches } from "./use-git-write";
 import styles from "./git-actions.module.css";
 
 export interface GitActionsProps {
-  root: string;
   status: GitStatus | undefined;
   pending: boolean;
   error: string | null;
+  branches: GitBranch[];
+  currentBranch: string | null;
+  branchesLoading: boolean;
+  branchesError: string | null;
   onStageAll(): void;
   onUnstageAll(): void;
   onCommit(message: string, amend: boolean): Promise<void>;
@@ -22,24 +25,26 @@ function stagedCount(status: GitStatus | undefined): number {
 }
 
 export function GitActions({
-  root,
   status,
   pending,
   error,
+  branches,
+  currentBranch,
+  branchesLoading,
+  branchesError,
   onStageAll,
   onUnstageAll,
   onCommit,
   onCheckout,
   onCreateBranch,
 }: GitActionsProps) {
-  const branches = useGitBranches(root);
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
   const [creatingBranch, setCreatingBranch] = useState(false);
   const [branchName, setBranchName] = useState("");
 
-  const current = branches.data?.current ?? null;
-  const branchList = branches.data?.branches ?? [];
+  const current = currentBranch;
+  const branchList = branches;
   const changedCount = status?.isGitRepository ? status.files.length : 0;
   const staged = stagedCount(status);
   const trimmed = message.trim();
@@ -75,7 +80,7 @@ export function GitActions({
           className={styles.branchSelect}
           aria-label="Branch"
           value={current ?? ""}
-          disabled={pending || branches.isLoading}
+          disabled={pending || branchesLoading}
           onChange={(event) => {
             const branch = event.currentTarget.value;
             if (!branch || branch === current) return;
@@ -83,7 +88,7 @@ export function GitActions({
           }}
         >
           {current === null ? (
-            <option value="">{branches.isLoading ? "Loading…" : "Detached"}</option>
+            <option value="">{branchesLoading ? "Loading…" : "Detached"}</option>
           ) : null}
           {current !== null && !branchList.some((branch) => branch.name === current) ? (
             <option value={current}>{current}</option>
@@ -185,7 +190,7 @@ export function GitActions({
       </div>
 
       {error ? <p className={styles.error}>{error}</p> : null}
-      {!error && branches.isError ? <p className={styles.error}>{branches.error.message}</p> : null}
+      {!error && branchesError ? <p className={styles.error}>{branchesError}</p> : null}
     </div>
   );
 }

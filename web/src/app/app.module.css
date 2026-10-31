@@ -1,8 +1,38 @@
 .shell {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.showRail,
+.showWorkbench {
+  position: absolute;
+  top: 8px;
+  z-index: 20;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  padding: 3px 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.showRail {
+  left: 8px;
+}
+
+.showWorkbench {
+  right: 8px;
+}
+
+.showRail:hover,
+.showWorkbench:hover {
+  background: var(--surface-2);
+  color: var(--fg);
 }
 
 .railPane,
