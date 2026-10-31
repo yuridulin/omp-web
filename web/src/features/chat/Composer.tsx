@@ -1,7 +1,15 @@
-import type { JSX, KeyboardEvent, ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type JSX,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { QueueIcon, SendIcon, SteerIcon, StopIcon } from "./icons";
+import type { ComposerSubmitMode } from "@/slots/chat";
 import styles from "./composer.module.css";
 
-export type ComposerSubmitMode = "send" | "steer" | "followUp";
+export type { ComposerSubmitMode };
 
 export interface ComposerProps {
   value: string;
@@ -15,6 +23,7 @@ export interface ComposerProps {
   placeholder?: string;
   submitLabel?: string;
   controls?: ReactNode;
+  status?: ReactNode;
   hint?: string;
 }
 
@@ -30,17 +39,31 @@ export function Composer({
   pending = false,
   disabled = false,
   error = null,
-  placeholder = "Message omp…",
+  placeholder = "Message or run a task, / commands, @ files…",
   submitLabel,
   controls,
+  status,
   hint,
 }: ComposerProps): JSX.Element {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const blocked = disabled || pending;
   const empty = value.trim().length === 0;
+  const defaultHint = status ? undefined : running ? RUNNING_HINT : IDLE_HINT;
+  const visibleHint = hint ?? defaultHint;
   const abort = onAbort;
   const handleAbort = () => {
     if (abort) void abort();
   };
+
+  useEffect(() => {
+    const node = inputRef.current;
+    if (!node) return;
+    node.style.height = "auto";
+    const max = typeof window === "undefined" ? 320 : Math.max(120, window.innerHeight * 0.4);
+    const next = Math.min(node.scrollHeight, max);
+    node.style.height = next > 0 ? `${next}px` : "";
+    node.style.overflowY = node.scrollHeight > max ? "auto" : "hidden";
+  }, [value]);
 
   const submit = (mode: ComposerSubmitMode) => {
     const text = value.trim();
@@ -59,66 +82,78 @@ export function Composer({
   };
 
   return (
-    <div className={styles.composer}>
-      {controls ? <div className={styles.controls}>{controls}</div> : null}
-      <textarea
-        className={styles.input}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        rows={3}
-        spellCheck={false}
-        aria-label="Message"
-        disabled={disabled}
-      />
-      <div className={styles.bar}>
-        <span className={styles.hint}>{hint ?? (running ? RUNNING_HINT : IDLE_HINT)}</span>
-        <div className={styles.actions}>
-          {running ? (
-            <>
-              {abort ? (
+    <div className={styles.wrap}>
+      <div className={styles.composer}>
+        <textarea
+          ref={inputRef}
+          className={styles.input}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          spellCheck={false}
+          aria-label="Message"
+          disabled={disabled}
+        />
+        <div className={styles.toolbar}>
+          {controls ? <div className={styles.controls}>{controls}</div> : null}
+          <div className={styles.actions}>
+            {running ? (
+              <>
+                {abort ? (
+                  <button
+                    type="button"
+                    className={styles.stop}
+                    onClick={handleAbort}
+                    aria-label="Stop"
+                    title="Stop"
+                    disabled={disabled}
+                  >
+                    <StopIcon size={14} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className={styles.abort}
-                  onClick={handleAbort}
-                  aria-label="Stop"
-                  disabled={disabled}
+                  className={styles.ghost}
+                  onClick={() => submit("steer")}
+                  aria-label="Steer"
+                  title="Steer (Ctrl+Enter)"
+                  disabled={blocked || empty}
                 >
-                  Stop
+                  <SteerIcon size={13} />
+                  <span>Steer</span>
                 </button>
-              ) : null}
+                <button
+                  type="button"
+                  className={styles.queue}
+                  onClick={() => submit("followUp")}
+                  aria-label="Queue"
+                  title="Queue (Enter)"
+                  disabled={blocked || empty}
+                >
+                  <QueueIcon size={13} />
+                  <span>Queue</span>
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                className={styles.secondary}
-                onClick={() => submit("steer")}
-                aria-label="Steer"
+                className={styles.send}
+                onClick={() => submit("send")}
+                aria-label={submitLabel ?? "Send"}
+                title={submitLabel ? submitLabel : "Send (Enter)"}
                 disabled={blocked || empty}
               >
-                Steer
+                <SendIcon size={16} />
               </button>
-              <button
-                type="button"
-                className={styles.primary}
-                onClick={() => submit("followUp")}
-                aria-label="Queue"
-                disabled={blocked || empty}
-              >
-                Queue
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={() => submit("send")}
-              aria-label={submitLabel ?? "Send"}
-              disabled={blocked || empty}
-            >
-              {submitLabel ?? "Send"}
-            </button>
-          )}
+            )}
+          </div>
         </div>
+      </div>
+      <div className={styles.status}>
+        {status ? <div className={styles.stats}>{status}</div> : null}
+        {visibleHint ? <span className={styles.hint}>{visibleHint}</span> : null}
       </div>
       {error ? (
         <p className={styles.error} role="alert">

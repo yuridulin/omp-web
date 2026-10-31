@@ -1,5 +1,6 @@
 import type { ChangeEvent, JSX } from "react";
 import type { ModelEntry } from "@/api/agent";
+import { ChevronDownIcon, ModelIcon, ThinkingIcon } from "./icons";
 import styles from "./model-picker.module.css";
 
 export interface ModelPickerProps {
@@ -16,6 +17,16 @@ export interface ModelPickerProps {
 
 const DEFAULT_VALUE = "";
 const NO_MODELS_VALUE = "__no_models__";
+const THINKING_LABELS: Record<string, string> = {
+  auto: "Auto",
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "X-High",
+  max: "Max",
+};
 
 function decodeModel(value: string): { provider: string; modelId: string } | null {
   if (!value) return null;
@@ -89,10 +100,12 @@ export function ModelPicker({
 
   return (
     <div className={styles.picker}>
-      <label className={styles.field}>
-        <span className={styles.label}>Model</span>
+      <label className={styles.pill} title="Model">
+        <span className={styles.pillIcon}>
+          <ModelIcon size={13} />
+        </span>
         <select
-          className={styles.select}
+          className={`${styles.select} ${styles.modelSelect}`}
           value={currentModelValue}
           onChange={handleModelChange}
           disabled={inactive}
@@ -117,11 +130,16 @@ export function ModelPicker({
             </optgroup>
           ))}
         </select>
+        <span className={styles.chevron}>
+          <ChevronDownIcon size={12} />
+        </span>
       </label>
-      <label className={styles.field}>
-        <span className={styles.label}>Thinking</span>
+      <label className={styles.pill} title="Thinking level">
+        <span className={styles.pillIcon}>
+          <ThinkingIcon size={13} />
+        </span>
         <select
-          className={styles.select}
+          className={`${styles.select} ${styles.thinkingSelect}`}
           value={thinkingLevel}
           onChange={(event) => onChangeThinking(event.target.value)}
           disabled={inactive}
@@ -129,10 +147,13 @@ export function ModelPicker({
         >
           {thinking.map((level) => (
             <option key={level} value={level}>
-              {level}
+              {THINKING_LABELS[level] ?? level}
             </option>
           ))}
         </select>
+        <span className={styles.chevron}>
+          <ChevronDownIcon size={12} />
+        </span>
       </label>
     </div>
   );
