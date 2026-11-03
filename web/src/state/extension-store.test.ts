@@ -125,6 +125,34 @@ describe("extension request store", () => {
     });
   });
 
+  it("accepts the title-less ask frame omp actually sends", () => {
+    applyExtensionFrame("s1", {
+      type: "extension_ui_request",
+      id: "15bf7c66808ee5d7",
+      method: "ask",
+      questions: [
+        {
+          id: "fallback",
+          question: "What happens to the open chat after archiving?",
+          options: [{ label: "Next session" }, { label: "Draft" }],
+        },
+      ],
+    });
+
+    expect(getExtensionRequest("s1")).toEqual({
+      id: "15bf7c66808ee5d7",
+      method: "ask",
+      title: "Questions",
+      questions: [
+        {
+          id: "fallback",
+          question: "What happens to the open chat after archiving?",
+          options: [{ label: "Next session" }, { label: "Draft" }],
+        },
+      ],
+    });
+  });
+
   it("isolates sessions and only notifies the changed one", () => {
     const first = vi.fn();
     const second = vi.fn();

@@ -118,6 +118,8 @@ export interface ExtensionDialogClasses {
   questionHeader: string;
   questionText: string;
   input: string;
+  otherMarker: string;
+  otherInput: string;
   promptEditor: string;
   error: string;
   footer: string;

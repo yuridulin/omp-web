@@ -163,10 +163,18 @@ function parseQuestions(value: unknown): ExtensionQuestion[] | null {
   return questions;
 }
 
+/**
+ * omp's `ask` frame names no dialog title — the question belongs to the tool
+ * call, not to a titled prompt — so the store supplies the header text.
+ */
+const ASK_TITLE = "Questions";
+
 function parseRequest(frame: Record<string, unknown>): ExtensionRequest | null {
   const id = frame.id;
-  const title = frame.title;
-  if (typeof id !== "string" || typeof title !== "string") return null;
+  if (typeof id !== "string") return null;
+  // Every dialog but `ask` carries the runtime's own title.
+  if (frame.method !== "ask" && typeof frame.title !== "string") return null;
+  const title = typeof frame.title === "string" ? frame.title : ASK_TITLE;
   const expiresAt = optionalNumber(frame.expiresAt);
   const base = {
     id,

@@ -250,12 +250,21 @@ export function ExtensionDialog({
                       </label>
                     ))}
                     <label className={classes.option}>
+                      {/* Same indicator column as the options so the row lines up. */}
+                      <input
+                        type={question.multi ? "checkbox" : "radio"}
+                        className={classes.otherMarker}
+                        checked={entry.custom.trim() !== ""}
+                        readOnly
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      />
                       <span className={classes.optionLabel}>Other</span>
                       <input
-                        className={classes.input}
+                        className={`${classes.input} ${classes.otherInput}`}
                         type="text"
                         aria-label={`Other answer for ${question.question}`}
-                        placeholder="Other"
+                        placeholder="Your answer"
                         value={entry.custom}
                         disabled={busy}
                         onChange={(event) => changeAskCustom(question, event.target.value)}
