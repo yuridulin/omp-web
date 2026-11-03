@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { basename } from "@/api/paths";
-import { buildRailView, relativeTimeLabel, type RailSessionItem } from "@/features/rail/rail-view";
+import { buildRailView, type RailSessionItem } from "@/features/rail/rail-view";
 import type { RailSlotProps } from "@/slots/rail";
 import {
   ArchiveIcon,
@@ -24,16 +23,11 @@ export function RailSkin({
   unseen,
   loading,
   error,
-  archivedView,
-  archived,
-  archivedLoading,
-  archivedError,
   onSelect,
   onNewSession,
   onCollapse,
   onOpenSettings,
   onAddWorkspace,
-  onToggleArchivedView,
   onArchiveSession,
   onArchiveProject,
 }: RailSlotProps) {
@@ -179,18 +173,6 @@ export function RailSkin({
               <FilterIcon size={15} />
             </button>
           )}
-          {searchOpen ? null : (
-            <button
-              type="button"
-              className={archivedView ? `${styles.iconButton} ${styles.iconButtonActive}` : styles.iconButton}
-              onClick={onToggleArchivedView}
-              title={archivedView ? "Show live sessions" : "Show archived sessions"}
-              aria-label={archivedView ? "Show live sessions" : "Show archived sessions"}
-              aria-pressed={archivedView}
-            >
-              <ArchiveIcon size={15} />
-            </button>
-          )}
           <button
             type="button"
             className={styles.iconButton}
@@ -207,31 +189,7 @@ export function RailSkin({
         {error ? <p className={styles.error}>{error}</p> : null}
         {loading && sessions.length === 0 ? <p className={styles.muted}>Loading sessions…</p> : null}
 
-        {archivedView ? (
-          <section className={styles.section}>
-            <div className={styles.sectionLabelRow}>
-              <span className={styles.sectionLabel}>Archived</span>
-              <span className={styles.sectionCount}>{archived.length}</span>
-            </div>
-            {archivedError ? <p className={styles.error}>{archivedError}</p> : null}
-            {archivedLoading && archived.length === 0 ? (
-              <p className={styles.muted}>Loading archive…</p>
-            ) : null}
-            {archived.map((item) => (
-              <div key={item.key} className={styles.archiveRow} title={item.cwd}>
-                <span className={styles.sessionName}>{item.name?.trim() || item.id.slice(0, 8)}</span>
-                <span className={styles.archiveMeta}>
-                  {basename(item.cwd)} · {relativeTimeLabel(item.archivedAt)}
-                </span>
-              </div>
-            ))}
-            {!archivedLoading && !archivedError && archived.length === 0 ? (
-              <p className={styles.muted}>No archived sessions</p>
-            ) : null}
-          </section>
-        ) : null}
-
-        {!archivedView && view.groups.map((group) => {
+        {view.groups.map((group) => {
           const isCollapsed = collapsed.has(group.key);
           return (
             <section key={group.key} className={styles.section}>
@@ -288,7 +246,7 @@ export function RailSkin({
           );
         })}
 
-        {!archivedView && empty ? (
+        {empty ? (
           <p className={styles.muted}>
             {runningOnly ? "No running sessions" : query.trim() ? "No matching sessions" : "No sessions"}
           </p>

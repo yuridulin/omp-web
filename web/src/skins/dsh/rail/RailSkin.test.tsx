@@ -30,17 +30,12 @@ function renderRail(overrides: Partial<Parameters<typeof RailSkin>[0]> = {}) {
     unseen: new Set(),
     loading: false,
     error: null,
-    archivedView: false,
-    archived: [],
-    archivedLoading: false,
-    archivedError: null,
     onSelect: () => {},
     onNewSession: () => {},
     onRefresh: () => {},
     onCollapse: () => {},
     onOpenSettings: () => {},
     onAddWorkspace: () => {},
-    onToggleArchivedView: () => {},
     onArchiveSession: () => {},
     onArchiveProject: () => {},
     ...overrides,
@@ -124,27 +119,10 @@ describe("rail archive actions", () => {
     expect(onArchiveProject).toHaveBeenCalledWith("/projects/games");
   });
 
-  it("swaps the live list for archived sessions when the filter is on", () => {
-    renderRail({
-      sessions: [session],
-      archivedView: true,
-      archived: [
-        {
-          key: "games/one.jsonl.gz",
-          id: "archived-one",
-          cwd: "/projects/games",
-          name: "Old chat",
-          created: "2025-12-01T00:00:00.000Z",
-          archivedAt: new Date().toISOString(),
-          messageCount: 3,
-          firstMessage: "old",
-          size: 123,
-        },
-      ],
-    });
+  it("has no archived-sessions toggle in the header", () => {
+    renderRail({ sessions: [session] });
 
-    expect(screen.queryByRole("button", { name: "First session" })).toBeNull();
-    expect(screen.getByText("Old chat")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show live sessions" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /archived sessions/i })).toBeNull();
+    expect(screen.queryByText("Archived")).toBeNull();
   });
 });

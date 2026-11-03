@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { archiveSession } from "@/api/agent";
 import { comparablePath } from "@/api/paths";
 import type { SessionSummary } from "@/api/workspace";
 import { pickBrowserFolder } from "@/features/rail/pick-workspace-folder";
 import { archiveProject, registerProject } from "@/api/workspace";
 import { useProjects } from "@/features/projects/use-projects";
-import { useArchivedSessions } from "@/features/sessions/use-archived-sessions";
 import { useSessions } from "@/features/sessions/use-sessions";
 import { useUnseenSessions } from "@/features/sessions/use-unseen-sessions";
 import { getLayout, updateLayout } from "@/layout/layout-store";
@@ -45,9 +43,6 @@ export function RailColumn({
   const projects = useProjects();
   const [addError, setAddError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [archivedView, setArchivedView] = useState(false);
-  const queryClient = useQueryClient();
-  const archived = useArchivedSessions(archivedView);
   const adding = useRef(false);
   const fallbackRunning = sessions.data?.runningSessionIds ?? EMPTY_RUNNING;
   const running = useRunningSessions(fallbackRunning);
@@ -56,7 +51,6 @@ export function RailColumn({
 
   const refreshAfterArchive = async (): Promise<void> => {
     await Promise.all([sessions.refetch(), projects.refetch()]);
-    void queryClient.invalidateQueries({ queryKey: ["archived-sessions"] });
   };
 
   const closeIfArchived = (projectPath: string, sessionIds: readonly string[]): void => {
@@ -131,16 +125,8 @@ export function RailColumn({
           unseen={unseen}
           loading={sessions.isLoading}
           error={actionError ?? addError ?? (sessions.isError ? sessions.error.message : null)}
-          archivedView={archivedView}
-          archived={archived.data ?? []}
-          archivedLoading={archived.isFetching}
-          archivedError={archived.isError ? archived.error.message : null}
           onSelect={onSelect}
           onNewSession={onNewSession}
-          onToggleArchivedView={() => {
-            setActionError(null);
-            setArchivedView((value) => !value);
-          }}
           onArchiveSession={handleArchiveSession}
           onArchiveProject={handleArchiveProject}
           onRefresh={() => {
