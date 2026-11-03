@@ -26,8 +26,8 @@ export interface DraftPatch {
 export type ChatIntent =
   /* Prompting */
   | { kind: "prompt"; text: string; images?: readonly unknown[] }
-  | { kind: "steer"; text: string }
-  | { kind: "follow-up"; text: string }
+  | { kind: "steer"; text: string; images?: readonly unknown[] }
+  | { kind: "follow-up"; text: string; images?: readonly unknown[] }
   /* Run control */
   | { kind: "abort" }
   | { kind: "abort-compaction" }
@@ -83,9 +83,18 @@ export function toFrame(intent: ChatIntent): AgentCommand | null {
         ...(intent.images && intent.images.length ? { images: intent.images } : {}),
       };
     case "steer":
-      return { type: "steer", message: intent.text, streamingBehavior: "steer" };
+      return {
+        type: "steer",
+        message: intent.text,
+        streamingBehavior: "steer",
+        ...(intent.images && intent.images.length ? { images: intent.images } : {}),
+      };
     case "follow-up":
-      return { type: "follow_up", message: intent.text };
+      return {
+        type: "follow_up",
+        message: intent.text,
+        ...(intent.images && intent.images.length ? { images: intent.images } : {}),
+      };
     case "abort":
       return { type: "abort" };
     case "abort-compaction":
@@ -192,11 +201,17 @@ export function parseChatIntent(value: unknown): ChatIntent | null {
     }
     case "steer": {
       const text = stringField(value, "text");
-      return text === null ? null : { kind: "steer", text };
+      if (text === null) return null;
+      if (value.images === undefined) return { kind: "steer", text };
+      if (!Array.isArray(value.images)) return null;
+      return { kind: "steer", text, images: value.images };
     }
     case "follow-up": {
       const text = stringField(value, "text");
-      return text === null ? null : { kind: "follow-up", text };
+      if (text === null) return null;
+      if (value.images === undefined) return { kind: "follow-up", text };
+      if (!Array.isArray(value.images)) return null;
+      return { kind: "follow-up", text, images: value.images };
     }
     case "abort":
       return { kind: "abort" };

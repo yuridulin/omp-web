@@ -1,6 +1,12 @@
 import type { JSX, ReactNode } from "react";
 import type { ComposerSubmitMode } from "@/slots/chat";
-import { setComposerDraft } from "@/state/composer-store";
+import {
+  addComposerImages,
+  clearComposerDraft,
+  removeComposerImage,
+  setComposerDraft,
+  type ComposerImage,
+} from "@/state/composer-store";
 import { useComposerDraft } from "@/state/use-composer-draft";
 import type { ComposerClasses } from "./classes";
 import { Composer } from "./Composer";
@@ -8,7 +14,11 @@ import { Composer } from "./Composer";
 export interface ComposerDockProps {
   sessionId: string | null;
   classes: ComposerClasses;
-  onSend: (text: string, mode: ComposerSubmitMode) => Promise<void>;
+  onSend: (
+    text: string,
+    mode: ComposerSubmitMode,
+    images: readonly ComposerImage[],
+  ) => Promise<void>;
   onAbort?: () => void | Promise<void>;
   running: boolean;
   pending?: boolean;
@@ -34,27 +44,42 @@ export function ComposerDock({
   controls,
   status,
 }: ComposerDockProps): JSX.Element {
-  const draft = useComposerDraft(sessionId);
+  const { value: draft, images } = useComposerDraft(sessionId);
 
   const changeDraft = (value: string) => {
     if (sessionId) setComposerDraft(sessionId, value);
   };
 
-  const submit = async (text: string, mode: ComposerSubmitMode): Promise<void> => {
+  const addImages = (added: ComposerImage[]) => {
+    if (sessionId) addComposerImages(sessionId, added);
+  };
+
+  const removeImage = (id: string) => {
+    if (sessionId) removeComposerImage(sessionId, id);
+  };
+
+  const submit = async (
+    text: string,
+    mode: ComposerSubmitMode,
+    attached: readonly ComposerImage[],
+  ): Promise<void> => {
     try {
-      await onSend(text, mode);
+      await onSend(text, mode, attached);
     } catch {
       return;
     }
-    if (sessionId) setComposerDraft(sessionId, "");
+    if (sessionId) clearComposerDraft(sessionId);
   };
 
   return (
     <Composer
       value={draft}
+      images={images}
       classes={classes}
       onChange={changeDraft}
       onSubmit={submit}
+      onAddImages={addImages}
+      onRemoveImage={removeImage}
       running={running}
       pending={pending}
       dropActive={dropActive}

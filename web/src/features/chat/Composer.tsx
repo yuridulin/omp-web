@@ -1,21 +1,32 @@
 import {
   useEffect,
   useRef,
+  useState,
+  type ClipboardEvent,
   type JSX,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { QueueIcon, SendIcon, SteerIcon, StopIcon } from "./icons";
 import type { ComposerSubmitMode } from "@/slots/chat";
+import type { ComposerImage } from "@/state/composer-store";
 import type { ComposerClasses } from "./classes";
+import { clipboardImageFiles, preparePastedImages } from "./image-attachments";
 
 export type { ComposerSubmitMode };
 
 export interface ComposerProps {
   value: string;
   classes: ComposerClasses;
+  images?: readonly ComposerImage[];
   onChange: (value: string) => void;
-  onSubmit: (text: string, mode: ComposerSubmitMode) => void | Promise<void>;
+  onSubmit: (
+    text: string,
+    mode: ComposerSubmitMode,
+    images: readonly ComposerImage[],
+  ) => void | Promise<void>;
+  onAddImages?: (images: ComposerImage[]) => void;
+  onRemoveImage?: (id: string) => void;
   onAbort?: () => void | Promise<void>;
   running: boolean;
   pending?: boolean;
@@ -35,8 +46,11 @@ const RUNNING_HINT = "Enter to queue · Ctrl+Enter to steer · Shift+Enter newli
 export function Composer({
   value,
   classes,
+  images = [],
   onChange,
   onSubmit,
+  onAddImages,
+  onRemoveImage,
   onAbort,
   running,
   pending = false,
@@ -50,8 +64,10 @@ export function Composer({
   hint,
 }: ComposerProps): JSX.Element {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const blocked = disabled || pending;
-  const empty = value.trim().length === 0;
+  const empty = value.trim().length === 0 && images.length === 0;
+  const visibleError = pasteError ?? error;
   const defaultHint = status ? undefined : running ? RUNNING_HINT : IDLE_HINT;
   const visibleHint = hint ?? defaultHint;
   const abort = onAbort;
@@ -71,8 +87,28 @@ export function Composer({
 
   const submit = (mode: ComposerSubmitMode) => {
     const text = value.trim();
-    if (!text || blocked) return;
-    void onSubmit(text, mode);
+    if ((text === "" && images.length === 0) || blocked) return;
+    void onSubmit(text, mode, images);
+  };
+
+  const handleChange = (next: string) => {
+    setPasteError(null);
+    onChange(next);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onAddImages || blocked) return;
+    const files = clipboardImageFiles(event.clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    setPasteError(null);
+    void preparePastedImages(files, images).then(({ images: prepared, error: nextError }) => {
+      if (nextError) {
+        setPasteError(nextError);
+        return;
+      }
+      if (prepared.length > 0) onAddImages(prepared);
+    });
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -88,12 +124,37 @@ export function Composer({
   return (
     <div className={classes.wrap}>
       <div className={dropActive ? `${classes.composer} ${classes.composerDrop}` : classes.composer}>
+        {images.length > 0 ? (
+          <ul className={classes.attachments} aria-label="Attached images">
+            {images.map((image, index) => (
+              <li key={image.id} className={classes.attachment}>
+                <img
+                  className={classes.attachmentImage}
+                  src={`data:${image.mimeType};base64,${image.data}`}
+                  alt={`Attached image ${index + 1}`}
+                />
+                {onRemoveImage ? (
+                  <button
+                    type="button"
+                    className={classes.attachmentRemove}
+                    onClick={() => onRemoveImage(image.id)}
+                    aria-label={`Remove image ${index + 1}`}
+                    title="Remove image"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <textarea
           ref={inputRef}
           className={classes.input}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => handleChange(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           rows={1}
           spellCheck={false}
@@ -159,9 +220,9 @@ export function Composer({
       </div>
       {status ? <div className={classes.stats}>{status}</div> : null}
       {visibleHint ? <span className={classes.hint}>{visibleHint}</span> : null}
-      {error ? (
+      {visibleError ? (
         <p className={classes.error} role="alert">
-          {error}
+          {visibleError}
         </p>
       ) : null}
     </div>

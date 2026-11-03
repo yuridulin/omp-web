@@ -59,6 +59,10 @@ export interface ComposerClasses {
   wrap: string;
   composer: string;
   composerDrop: string;
+  attachments: string;
+  attachment: string;
+  attachmentImage: string;
+  attachmentRemove: string;
   input: string;
   footer: string;
   controls: string;

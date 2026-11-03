@@ -2021,10 +2021,12 @@ export interface paths {
                         /** @constant */
                         kind: "steer";
                         text: string;
+                        images?: unknown[];
                     } | {
                         /** @constant */
                         kind: "follow-up";
                         text: string;
+                        images?: unknown[];
                     } | {
                         /** @constant */
                         kind: "abort";

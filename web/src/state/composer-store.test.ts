@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseDragPayload, serializeDragPayload, type DragPayload } from "@/drag/payload";
 import {
+  addComposerImages,
   appendComposerDraft,
+  clearComposerDraft,
   getComposerDraft,
+  getComposerImages,
+  makeComposerImage,
+  removeComposerImage,
   resetComposerStoreForTests,
   seedComposerDraft,
   setComposerDraft,
@@ -62,5 +67,25 @@ describe("composer store", () => {
     unsubscribe();
     setComposerDraft("s1", "c");
     expect(calls).toBe(2);
+  });
+
+  it("keeps image attachments per session and clears them with the draft", () => {
+    const first = makeComposerImage("AAAA", "image/png", 3);
+    const second = makeComposerImage("BBBB", "image/jpeg", 3);
+    addComposerImages("s1", [first]);
+    addComposerImages("s1", [second]);
+    addComposerImages("s2", [makeComposerImage("CCCC", "image/png", 3)]);
+
+    expect(getComposerImages("s1")).toEqual([first, second]);
+    expect(getComposerImages("s1")).toBe(getComposerImages("s1"));
+    expect(getComposerImages("s2")).toHaveLength(1);
+
+    removeComposerImage("s1", first.id);
+    expect(getComposerImages("s1")).toEqual([second]);
+
+    setComposerDraft("s1", "hello");
+    clearComposerDraft("s1");
+    expect(getComposerDraft("s1")).toBe("");
+    expect(getComposerImages("s1")).toHaveLength(0);
   });
 });

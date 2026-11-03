@@ -3,6 +3,7 @@ import type { ChatMessage, SessionSnapshot } from "@/api/session-types";
 import type { SessionSummary } from "@/api/workspace";
 import type { DragPayload } from "@/drag/payload";
 import type { ExtensionRequest, ExtensionResponse } from "@/state/extension-store";
+import type { ComposerImage } from "@/state/composer-store";
 
 export type ComposerSubmitMode = "send" | "steer" | "followUp";
 
@@ -32,7 +33,11 @@ export interface ChatSlotProps {
   running: boolean;
   queue: { steering: string[]; followUp: string[] };
   sending: boolean;
-  onSend: (text: string, mode: ComposerSubmitMode) => Promise<void>;
+  onSend: (
+    text: string,
+    mode: ComposerSubmitMode,
+    images: readonly ComposerImage[],
+  ) => Promise<void>;
   onAbort: () => void;
   onRemoveQueued: (queue: "steering" | "followUp", text: string) => void;
   onPromoteQueued: (text: string) => void;

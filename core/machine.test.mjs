@@ -99,6 +99,25 @@ test("dispatch(prompt) sends one frame and keeps the optimistic bubble", async (
   assert.equal(machine.state.optimistic, null);
 });
 
+test("a prompt with images forwards them and shows them optimistically", async () => {
+  const fake = fakeTransport();
+  const machine = new SessionMachine({ transport: fake.transport, clock });
+  machine.open("sess-1");
+
+  const images = [{ type: "image", data: "AAAA", mimeType: "image/png" }];
+  await machine.dispatch({ kind: "prompt", text: "what is this?", images });
+
+  assert.deepEqual(fake.sent.at(-1).command, {
+    type: "prompt",
+    message: "what is this?",
+    images,
+  });
+  assert.deepEqual(machine.state.optimistic?.content, [
+    { type: "text", text: "what is this?" },
+    { type: "image", data: "AAAA", mimeType: "image/png" },
+  ]);
+});
+
 test("a refused prompt is withdrawn and reported", async () => {
   const fake = fakeTransport();
   fake.replies.push({ ok: false, error: "runtime busy", code: "prompt_rejected" });

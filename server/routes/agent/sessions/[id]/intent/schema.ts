@@ -22,8 +22,8 @@ const draftPatch = z.object({
 
 export const chatIntentSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("prompt"), text: z.string(), images: z.array(z.unknown()).optional() }),
-  z.object({ kind: z.literal("steer"), text: z.string() }),
-  z.object({ kind: z.literal("follow-up"), text: z.string() }),
+  z.object({ kind: z.literal("steer"), text: z.string(), images: z.array(z.unknown()).optional() }),
+  z.object({ kind: z.literal("follow-up"), text: z.string(), images: z.array(z.unknown()).optional() }),
   z.object({ kind: z.literal("abort") }),
   z.object({ kind: z.literal("abort-compaction") }),
   z.object({ kind: z.literal("compact"), instructions: z.string().optional() }),

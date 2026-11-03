@@ -2191,6 +2191,9 @@ paths:
                       const: steer
                     text:
                       type: string
+                    images:
+                      type: array
+                      items: {}
                   required:
                     - kind
                     - text
@@ -2201,6 +2204,9 @@ paths:
                       const: follow-up
                     text:
                       type: string
+                    images:
+                      type: array
+                      items: {}
                   required:
                     - kind
                     - text

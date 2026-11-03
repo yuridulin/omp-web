@@ -2,6 +2,7 @@ import type { AgentMessage, UserMessage } from "./types";
 import { branchReducer, initialBranching, type BranchingState } from "./branching";
 import { type ChatIntent, isLocalIntent, toFrame } from "./commands";
 import { EMPTY_DRAFT, isDraftEmpty, parseDraft, serializeDraft, type Draft } from "./drafts";
+import { isRecord } from "./guards";
 import type { AgentCommand, Clock, DraftStorage, Transport } from "./ports";
 import { systemClock } from "./ports";
 import { reduce, type SessionAction } from "./reducer";
@@ -33,6 +34,19 @@ export interface DispatchResult {
   reason?: string;
   /** Payload of a command the host must act on (a fork's new session id). */
   data?: unknown;
+}
+
+/** Render a prompt with its attachments before the runtime echoes it back. */
+function optimisticContent(text: string, images?: readonly unknown[]): UserMessage["content"] {
+  if (!images || images.length === 0) return text;
+  const blocks: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+  if (text !== "") blocks.push({ type: "text", text });
+  for (const value of images) {
+    if (!isRecord(value) || value.type !== "image") continue;
+    if (typeof value.data !== "string" || typeof value.mimeType !== "string") continue;
+    blocks.push({ type: "image", data: value.data, mimeType: value.mimeType });
+  }
+  return blocks.length > 0 ? blocks : text;
 }
 
 export class SessionMachine {
@@ -173,7 +187,11 @@ export class SessionMachine {
   }
 
   async #prompt(text: string, images?: readonly unknown[]): Promise<DispatchResult> {
-    const message: UserMessage = { role: "user", content: text, timestamp: this.#clock.now() };
+    const message: UserMessage = {
+      role: "user",
+      content: optimisticContent(text, images),
+      timestamp: this.#clock.now(),
+    };
     this.#apply({ type: "prompt", message });
     const result = await this.#transport.send(this.#requireSession(), {
       type: "prompt",
