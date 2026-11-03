@@ -98,8 +98,10 @@ the UI never imports `core/`, `lib/` or `server/`.
 
 ## New session & composer
 
-- Each project header has a `+` button that opens the new-session pane seeded
-  with that project root. `N` still opens the pane from the current session.
+- A project header's `+` button opens the normal empty chat seeded with that
+  project root; `N` opens it from the current session or the default
+  workspace. There is no separate pane and no workspace form: the first send
+  creates the session and continues in the same chat.
 - While idle, `Enter` sends and `Shift+Enter` inserts a newline.
 - While the agent is running, `Enter` queues a follow-up and
   `Ctrl`/`Cmd`+`Enter` steers the active turn; `Shift+Enter` still inserts a

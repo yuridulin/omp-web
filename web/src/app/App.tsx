@@ -1,26 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { scheduleIdle } from "@/state/schedule-idle";
 import { useQueryClient } from "@tanstack/react-query";
-import { createSession, dispatchIntent, type ModelCatalog } from "@/api/agent";
 import type { SessionSummary } from "@/api/workspace";
 import { ChatColumn } from "@/app/ChatColumn";
 import { RailColumn } from "@/app/RailColumn";
 import { WorkbenchColumn } from "@/app/WorkbenchColumn";
-import { NewSessionPane, type NewSessionInputView } from "@/features/chat/NewSessionPane";
-import { useProjects } from "@/features/projects/use-projects";
-import { useModels } from "@/features/sessions/use-models";
 import { SystemPanel } from "@/features/system/SystemPanel";
 import { getLayout, updateLayout } from "@/layout/layout-store";
 import { catalogSession, useSessionPaths } from "@/state/session-catalog";
 import { bumpStreamGeneration } from "@/state/stream-generation";
 import { NotificationProvider } from "@/state/notification-center";
 import styles from "./app.module.css";
-
-const EMPTY_CATALOG: ModelCatalog = { modelList: [], defaultModel: null, thinkingLevels: {} };
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
 
 interface PendingSession {
   id: string;
@@ -79,35 +69,6 @@ function ShellHotkeys({
   return null;
 }
 
-function NewSessionHost({
-  busy,
-  error,
-  initialCwd,
-  onCancel,
-  onCreate,
-}: {
-  busy: boolean;
-  error: string | null;
-  initialCwd: string | null;
-  onCancel: () => void;
-  onCreate: (input: NewSessionInputView) => Promise<void>;
-}) {
-  const projects = useProjects();
-  const modelsQuery = useModels();
-  return (
-    <NewSessionPane
-      projects={projects.data ?? []}
-      models={modelsQuery.data ?? EMPTY_CATALOG}
-      modelsLoading={modelsQuery.isLoading}
-      busy={busy}
-      error={error}
-      initialCwd={initialCwd}
-      onCancel={onCancel}
-      onCreate={onCreate}
-    />
-  );
-}
-
 function SettingsHost({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
   const paths = useSessionPaths(sessionId);
   return <SystemPanel root={paths.root} sessionId={sessionId} onClose={onClose} />;
@@ -116,13 +77,9 @@ function SettingsHost({ sessionId, onClose }: { sessionId: string | null; onClos
 export function App() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(window.location.search).get("session"));
-  const [newSession, setNewSession] = useState(false);
   const [newSessionSeedCwd, setNewSessionSeedCwd] = useState<string | null>(null);
+  const [newSessionEpoch, setNewSessionEpoch] = useState(0);
   const [pendingSession, setPendingSession] = useState<PendingSession | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const pendingSummary = useMemo<SessionSummary | null>(() => {
@@ -146,11 +103,8 @@ export function App() {
   const selectSession = (sessionId: string) => {
     const next = sessionId || null;
     setSelected(next);
-    setNewSession(false);
     setNewSessionSeedCwd(null);
     setPendingSession(null);
-    setCreateError(null);
-    setStartError(null);
     window.history.replaceState(
       null,
       "",
@@ -166,49 +120,18 @@ export function App() {
       ?? listed?.projectRoot
       ?? null;
     setNewSessionSeedCwd(seed);
-    setNewSession(true);
-    setCreateError(null);
+    setNewSessionEpoch((epoch) => epoch + 1);
+    setSelected(null);
+    window.history.replaceState(null, "", window.location.pathname);
   };
 
-  const cancelNewSession = () => {
-    setNewSession(false);
+  const handleSessionCreated = (id: string, cwd: string) => {
+    setPendingSession({ id, cwd });
+    setSelected(id);
     setNewSessionSeedCwd(null);
-    setCreateError(null);
-  };
-
-  const createAndStart = async (input: NewSessionInputView): Promise<void> => {
-    setCreating(true);
-    setCreateError(null);
-    let created: string;
-    try {
-      created = await createSession({
-        cwd: input.cwd,
-        ...(input.provider !== undefined ? { provider: input.provider } : {}),
-        ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
-        ...(input.thinkingLevel !== undefined ? { thinkingLevel: input.thinkingLevel } : {}),
-      });
-    } catch (cause) {
-      setCreating(false);
-      setCreateError(errorMessage(cause));
-      throw cause;
-    }
-    setPendingSession({ id: created, cwd: input.cwd });
-    setSelected(created);
-    setNewSession(false);
-    setNewSessionSeedCwd(null);
-    window.history.replaceState(null, "", `?session=${encodeURIComponent(created)}`);
+    window.history.replaceState(null, "", `?session=${encodeURIComponent(id)}`);
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
     bumpStreamGeneration();
-    setStarting(true);
-    try {
-      const result = await dispatchIntent(created, { kind: "prompt", text: input.text });
-      if (result.bootstrapped) bumpStreamGeneration();
-    } catch (cause) {
-      setStartError(errorMessage(cause));
-    } finally {
-      setStarting(false);
-      setCreating(false);
-    }
   };
 
   return (
@@ -224,23 +147,14 @@ export function App() {
           onNewSession={openNewSession}
           onOpenSettings={() => setSettingsOpen(true)}
         />
-        {newSession ? (
-          <NewSessionHost
-            busy={creating}
-            error={createError}
-            initialCwd={newSessionSeedCwd}
-            onCancel={cancelNewSession}
-            onCreate={createAndStart}
-          />
-        ) : (
-          <ChatColumn
-            selected={selected}
-            pendingSession={pendingSummary}
-            externalError={startError}
-            externalSending={starting}
-          />
-        )}
-        {!newSession && selected ? (
+        <ChatColumn
+          selected={selected}
+          pendingSession={pendingSummary}
+          newSessionCwd={newSessionSeedCwd}
+          newSessionEpoch={newSessionEpoch}
+          onSessionCreated={handleSessionCreated}
+        />
+        {selected ? (
           <WorkbenchColumn
             selected={selected}
             pendingCwd={pendingSession?.id === selected ? pendingSession.cwd : null}

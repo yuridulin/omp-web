@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  createSession,
   dispatchIntent,
+  fetchDefaultCwd,
+  validateCwd,
   type ChatIntentBody,
   type IntentDispatchResult,
   type ModelCatalog,
@@ -11,7 +14,8 @@ import { useModels } from "@/features/sessions/use-models";
 import { useSessionModel } from "@/features/sessions/use-session-model";
 import { skinFor } from "@/skins/registry";
 import type { ComposerSubmitMode } from "@/slots/chat";
-import { appendComposerDraft } from "@/state/composer-store";
+import { appendComposerDraft, NEW_SESSION_DRAFT_ID, type ComposerImage } from "@/state/composer-store";
+import { toPromptImages } from "@/features/chat/image-attachments";
 import { useHistoryWindow, loadOlderHistory } from "@/state/history-window";
 import {
   clearExtensionRequest,
@@ -64,13 +68,21 @@ interface ChatColumnProps {
   selected: string | null;
   /** Shown until the session list includes the id just created. */
   pendingSession: SessionSummary | null;
-  /** First-prompt failure, owned by the shell that created the session. */
-  externalError: string | null;
-  /** True while that first prompt is still in flight. */
-  externalSending: boolean;
+  /** Workspace seeded by the rail or the last session when starting a new one. */
+  newSessionCwd: string | null;
+  /** Bumps for every explicit new-session request so the draft state resets. */
+  newSessionEpoch: number;
+  /** A first prompt created this session; the shell selects it. */
+  onSessionCreated: (id: string, cwd: string) => void;
 }
 
-export function ChatColumn({ selected, pendingSession, externalError, externalSending }: ChatColumnProps) {
+export function ChatColumn({
+  selected,
+  pendingSession,
+  newSessionCwd,
+  newSessionEpoch,
+  onSessionCreated,
+}: ChatColumnProps) {
   const appearance = useAppearance();
   const listed = useListedSession(selected);
   const session = listed ?? pendingSession;
@@ -88,6 +100,11 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
   const [extensionError, setExtensionError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [draftCwd, setDraftCwd] = useState(newSessionCwd ?? "");
+  const [draftCwdError, setDraftCwdError] = useState<string | null>(null);
+  const [draftModel, setDraftModel] = useState<{ provider: string; modelId: string } | null>(null);
+  const [draftThinking, setDraftThinking] = useState("auto");
+  const draftEpoch = useRef(newSessionEpoch);
   const modelsQuery = useModels();
   const models = modelsQuery.data;
   const modelFallback = useMemo(() => {
@@ -96,12 +113,68 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
   }, [history.model, history.thinkingLevel]);
   const sessionModel = useSessionModel(selected, modelFallback);
   const liveModel = sessionModel.value;
-  const modelValue = liveModel ? { provider: liveModel.provider, modelId: liveModel.modelId } : null;
-  const thinkingLevel = liveModel?.thinkingLevel ?? "off";
-  const thinkingLevels = useMemo(
+  const isDraft = selected === null;
+  const draftModelValue = draftModel ?? models?.defaultModel ?? null;
+  const liveThinkingLevels = useMemo(
     () => thinkingLevelsFor(models, liveModel?.provider ?? null, liveModel?.modelId ?? null),
     [models, liveModel?.provider, liveModel?.modelId],
   );
+  const draftThinkingLevels = useMemo(
+    () =>
+      thinkingLevelsFor(
+        models,
+        draftModelValue?.provider ?? null,
+        draftModelValue?.modelId ?? null,
+      ),
+    [models, draftModelValue?.provider, draftModelValue?.modelId],
+  );
+  const activeModel = isDraft ? draftModelValue : liveModel;
+  const modelValue = activeModel
+    ? { provider: activeModel.provider, modelId: activeModel.modelId }
+    : null;
+  const thinkingLevel = isDraft ? draftThinking : (liveModel?.thinkingLevel ?? "off");
+  const thinkingLevels = isDraft ? draftThinkingLevels : liveThinkingLevels;
+
+  const draftSummary = useMemo<SessionSummary | null>(() => {
+    if (!isDraft || draftCwd.trim() === "") return null;
+    const now = new Date().toISOString();
+    return {
+      path: "",
+      id: NEW_SESSION_DRAFT_ID,
+      cwd: draftCwd,
+      name: "New session",
+      created: now,
+      modified: now,
+      messageCount: 0,
+      firstMessage: "",
+      projectRoot: draftCwd,
+    };
+  }, [isDraft, draftCwd]);
+
+  const resolveDraftCwd = useCallback(async () => {
+    setDraftCwdError(null);
+    try {
+      const path = await fetchDefaultCwd();
+      setDraftCwd((current) => (current.trim() === "" ? path : current));
+    } catch (cause) {
+      setDraftCwdError(errorMessage(cause));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (draftEpoch.current === newSessionEpoch) return;
+    draftEpoch.current = newSessionEpoch;
+    setDraftCwd(newSessionCwd ?? "");
+    setDraftCwdError(null);
+    setDraftModel(null);
+    setDraftThinking("auto");
+  }, [newSessionEpoch, newSessionCwd]);
+
+  useEffect(() => {
+    if (selected !== null || draftCwd.trim() !== "") return;
+    void resolveDraftCwd();
+  }, [selected, draftCwd, resolveDraftCwd]);
+
   useEffect(() => {
     setExtensionError(null);
   }, [extensionRequestId]);
@@ -124,17 +197,41 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
     }
   };
 
-  const handleSend = async (text: string, mode: ComposerSubmitMode): Promise<void> => {
-    if (!selected) return;
+  const handleSend = async (
+    text: string,
+    mode: ComposerSubmitMode,
+    images: readonly ComposerImage[],
+  ): Promise<void> => {
     setSending(true);
     setSendError(null);
+    const attachments = toPromptImages(images);
+    const withImages = attachments.length > 0 ? { images: attachments } : {};
     try {
+      if (selected === null) {
+        let target = draftCwd.trim();
+        if (target === "") {
+          target = await fetchDefaultCwd();
+          setDraftCwd(target);
+        }
+        const validated = await validateCwd(target);
+        setDraftCwd(validated.cwd);
+        const created = await createSession({
+          cwd: validated.cwd,
+          ...(draftModel !== null
+            ? { provider: draftModel.provider, modelId: draftModel.modelId }
+            : {}),
+          ...(draftThinking !== "auto" ? { thinkingLevel: draftThinking } : {}),
+        });
+        onSessionCreated(created, validated.cwd);
+        await runIntent(created, { kind: "prompt", text, ...withImages });
+        return;
+      }
       const intent: ChatIntentBody =
         mode === "send"
-          ? { kind: "prompt", text }
+          ? { kind: "prompt", text, ...withImages }
           : mode === "steer"
-            ? { kind: "steer", text }
-            : { kind: "follow-up", text };
+            ? { kind: "steer", text, ...withImages }
+            : { kind: "follow-up", text, ...withImages };
       await runIntent(selected, intent);
     } catch (cause) {
       setSendError(errorMessage(cause));
@@ -146,7 +243,7 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
 
   return (
     <ChatSkin
-      session={session}
+      session={session ?? draftSummary}
       selected={selected}
       snapshot={snapshot}
       historyMessages={history.messages}
@@ -156,7 +253,7 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
       onLoadOlderHistory={() => {
         if (selected) void loadOlderHistory(selected);
       }}
-      streamError={streamError ?? sendError ?? externalError}
+      streamError={streamError ?? sendError ?? (isDraft ? draftCwdError : null)}
       extensionRequest={extensionRequest}
       extensionBusy={extensionBusy}
       extensionError={extensionError}
@@ -168,24 +265,31 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
       modelValue={modelValue}
       thinkingLevel={thinkingLevel}
       thinkingLevels={thinkingLevels}
-      modelLoading={sessionModel.loading}
+      modelLoading={isDraft ? false : sessionModel.loading}
       onModelChange={(provider, modelId) => {
-        if (!selected) return;
         setSendError(null);
+        if (selected === null) {
+          setDraftModel({ provider, modelId });
+          setDraftThinking("auto");
+          return;
+        }
         void runIntent(selected, { kind: "select-model", provider, modelId })
           .then(() => sessionModel.refetch())
           .catch((cause: unknown) => setSendError(errorMessage(cause)));
       }}
       onThinkingChange={(level) => {
-        if (!selected) return;
         setSendError(null);
+        if (selected === null) {
+          setDraftThinking(level);
+          return;
+        }
         void runIntent(selected, { kind: "set-thinking", level: asThinkingLevel(level) })
           .then(() => sessionModel.refetch())
           .catch((cause: unknown) => setSendError(errorMessage(cause)));
       }}
-      running={agentRunning}
+      running={isDraft ? false : agentRunning}
       queue={snapshot?.session.queue ?? EMPTY_QUEUE}
-      sending={sending || externalSending}
+      sending={sending}
       onSend={handleSend}
       onAbort={() => {
         if (!selected) return;
@@ -204,8 +308,8 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
         );
       }}
       onDropPayload={(payload: DragPayload) => {
-        if (!selected || payload.kind !== "file") return;
-        appendComposerDraft(selected, payload.path);
+        if (payload.kind !== "file") return;
+        appendComposerDraft(selected ?? NEW_SESSION_DRAFT_ID, payload.path);
       }}
     />
   );

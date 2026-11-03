@@ -3,21 +3,19 @@ import { readEnvironment } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
-test("starts a session from the new-session pane and survives a reload", async ({ page }) => {
+test("starts a session from the chat draft and survives a reload", async ({ page }) => {
   const env = readEnvironment();
   const prompt = "Hello from the E2E suite";
   const reply = `E2E response: ${prompt}`;
 
   await page.goto("/");
-  // New sessions are created from a project header, seeded with that root.
+  // New sessions start in the normal chat, seeded from the project header.
   const projectRow = page.getByTitle(env.workspace, { exact: true }).locator("..");
   await projectRow.getByRole("button", { name: /^New session in / }).click();
-  await expect(page.getByRole("heading", { name: "New session" })).toBeVisible();
-  await expect(page.getByLabel("Workspace path")).toHaveValue(env.workspace);
+  await expect(page.getByText("No messages yet.")).toBeVisible();
 
-  await page.getByLabel("Workspace path").fill(env.workspace);
   await page.getByLabel("Message").fill(prompt);
-  await page.getByRole("button", { name: "Start session" }).click();
+  await page.getByRole("button", { name: "Send" }).click();
 
   await expect(page).toHaveURL(/[?&]session=/);
   const sessionId = new URL(page.url()).searchParams.get("session");

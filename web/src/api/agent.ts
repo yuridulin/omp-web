@@ -39,13 +39,6 @@ export interface IntentDispatchResult {
   bootstrapped: boolean;
 }
 
-export interface CwdListing {
-  path: string;
-  parentPath: string | null;
-  directories: { name: string; path: string }[];
-  drives: { name: string; path: string }[];
-}
-
 export interface ValidatedCwd {
   cwd: string;
   projectRoot: string;
@@ -193,20 +186,6 @@ export async function fetchDefaultCwd(): Promise<string> {
   if (error) throw new Error(errorInfo(error, response.status).message);
   if (!data?.cwd) throw new Error("Unexpected empty default cwd response");
   return data.cwd;
-}
-
-export async function browseCwd(path?: string): Promise<CwdListing> {
-  const { data, error, response } = await api.GET("/api/workspace/cwd/browse", {
-    params: { query: path ? { path } : {} },
-  });
-  if (error) throw new Error(errorInfo(error, response.status).message);
-  if (!data) throw new Error("Unexpected empty cwd listing response");
-  return {
-    path: data.path,
-    parentPath: data.parentPath ?? null,
-    directories: data.directories ?? [],
-    drives: data.drives ?? [],
-  };
 }
 
 export async function validateCwd(cwd: string): Promise<ValidatedCwd> {

@@ -112,6 +112,41 @@ describe("chat skin composer", () => {
   });
 });
 
+describe("chat skin new session draft", () => {
+  it("is the normal empty chat with the same composer", () => {
+    const { container } = render(<ChatSkin {...props(vi.fn())} selected={null} />);
+
+    expect(screen.queryByText("Select a session")).toBeNull();
+    expect(screen.getByText("New session")).toBeTruthy();
+    expect(screen.getByText("No messages yet.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    expect(screen.queryByLabelText("Workspace path")).toBeNull();
+
+    const textarea = container.querySelector("textarea");
+    fireEvent.change(textarea as HTMLTextAreaElement, { target: { value: "first prompt" } });
+    expect((textarea as HTMLTextAreaElement).value).toBe("first prompt");
+  });
+
+  it("offers auto thinking only before the session exists", () => {
+    const options = (): string[] =>
+      Array.from(
+        screen.getByLabelText("Thinking level").querySelectorAll("option"),
+        (option) => (option as HTMLOptionElement).value,
+      );
+
+    const { unmount } = render(
+      <ChatSkin {...props(vi.fn())} selected={null} thinkingLevel="auto" thinkingLevels={["off", "high"]} />,
+    );
+    expect(options()).toEqual(["auto", "off", "high"]);
+    unmount();
+
+    render(
+      <ChatSkin {...props(vi.fn())} thinkingLevel="high" thinkingLevels={["off", "high"]} />,
+    );
+    expect(options()).toEqual(["off", "high"]);
+  });
+});
+
 describe("chat skin live turn", () => {
   it("shows a waiting line while the agent has not produced a visible block", () => {
     render(<ChatSkin {...props(vi.fn())} running />);

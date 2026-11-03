@@ -20,7 +20,7 @@ import {
 } from "@/features/chat/transcript-rows";
 import { useTranscriptScroll } from "@/features/chat/transcript-scroll";
 import type { ChatSlotProps } from "@/slots/chat";
-import { seedComposerDraft } from "@/state/composer-store";
+import { NEW_SESSION_DRAFT_ID, seedComposerDraft } from "@/state/composer-store";
 import { dshChatClasses } from "./classes";
 import styles from "./chat.module.css";
 
@@ -128,23 +128,7 @@ export function ChatSkin({
     if (payload) onDropPayload(payload);
   };
 
-  if (!selected) {
-    return (
-      <main className={styles.chat}>
-        <header className={styles.header}>
-          <div className={styles.heading}>
-            <span className={styles.title}>No session</span>
-          </div>
-        </header>
-        <section className={styles.empty}>
-          <p className={styles.emptyTitle}>Select a session</p>
-          <p className={styles.quiet}>Projects and sessions live in the left rail.</p>
-        </section>
-      </main>
-    );
-  }
-
-  const title = session?.name?.trim() || selected.slice(0, 8);
+  const title = session?.name?.trim() || selected?.slice(0, 8) || "New session";
   const project = session ? basename(session.projectRoot ?? session.cwd) : "";
 
   return (
@@ -238,7 +222,7 @@ export function ChatSkin({
             onPromote={onPromoteQueued}
           />
           <ComposerDock
-            sessionId={selected}
+            sessionId={selected ?? NEW_SESSION_DRAFT_ID}
             classes={dshChatClasses.composer}
             onSend={onSend}
             onAbort={onAbort}
@@ -256,7 +240,7 @@ export function ChatSkin({
                 loading={modelsLoading || modelLoading}
                 onChangeModel={onModelChange}
                 onChangeThinking={onThinkingChange}
-                allowAutoThinking
+                allowAutoThinking={selected === null}
               />
             }
             status={
