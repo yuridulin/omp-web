@@ -90,9 +90,13 @@ export async function generateSessionTitle(this: TitleSession, quiet = false): P
     }
   }
 
-  // `/rename` without arguments generates a title (omp >= 18.6). It is a
-  // prompt, so it must never be sent while a run is in flight.
-  if (this.isRunning()) return null;
+  // `/rename` without arguments generates a title (omp >= 18.6). omp
+  // intercepts the builtin before the prompt queue and runs it in the
+  // background, so the quiet request may start while a run is in flight —
+  // that is how a new session gets a name during its first, possibly long,
+  // turn. A visible request goes through `send`, which owns the prompt
+  // bookkeeping, so it still waits for the run to end.
+  if (!quiet && this.isRunning()) return null;
   const before = (await this.readSessionName()) ?? "";
   if (quiet) {
     // omp saves the title before it prints the result, so the poll below can
@@ -114,16 +118,18 @@ export async function generateSessionTitle(this: TitleSession, quiet = false): P
 
 /**
  * omp does not title sessions on its own in RPC mode
- * (can1357/oh-my-pi#14616), so once a turn finishes, ask its title generator
- * to name an untitled session, as omp's terminal UI does.
+ * (can1357/oh-my-pi#14616), so ask its title generator to name an untitled
+ * session: as soon as the first reply starts (as omp's terminal UI does), and
+ * again when a turn finishes in case the earlier request declined. Returns
+ * whether a request started, so a caller can avoid asking twice in one run.
  */
-export function autoTitle(this: TitleSession): void {
+export function autoTitle(this: TitleSession): boolean {
   const sessionId = this._sessionId;
-  if (!sessionId || this._sessionName || this.autoTitleInFlight) return;
+  if (!sessionId || this._sessionName || this.autoTitleInFlight) return false;
   // omp writes the session file once the history holds an assistant message.
-  if (!this._sessionFile || !existsSync(this._sessionFile)) return;
+  if (!this._sessionFile || !existsSync(this._sessionFile)) return false;
   const attempts = this.autoTitleAttempts.get(sessionId) ?? 0;
-  if (attempts >= AUTO_TITLE_MAX_ATTEMPTS) return;
+  if (attempts >= AUTO_TITLE_MAX_ATTEMPTS) return false;
   this.autoTitleAttempts.set(sessionId, attempts + 1);
   this.autoTitleInFlight = true;
   this.generateTitle({ quiet: true })
@@ -133,6 +139,7 @@ export function autoTitle(this: TitleSession): void {
     .finally(() => {
       this.autoTitleInFlight = false;
     });
+  return true;
 }
 
 export async function readSessionName(this: TitleSession): Promise<string | null> {

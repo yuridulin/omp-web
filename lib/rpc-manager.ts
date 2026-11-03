@@ -435,6 +435,7 @@ export class AgentSessionWrapper {
     if (identityChanged && !moved) {
       this.resetStream();
       this.promptRunning = false;
+      this.replyTitleRequested = false;
       this.awaitingAgentStart = false;
       this.awaitingAgentStartDeadline = 0;
       this.continuationGraceUntil = 0;
@@ -467,6 +468,8 @@ export class AgentSessionWrapper {
   /** Background title requests made per session id (see autoTitle). */
   private autoTitleAttempts = new Map<string, number>();
   private autoTitleInFlight = false;
+  /** The current run already asked omp for a title (see the message_update case). */
+  private replyTitleRequested = false;
   /** Until this time, drop the chat output of a background `/rename`. */
   private quietRenameUntil = 0;
 
@@ -478,8 +481,8 @@ export class AgentSessionWrapper {
     return generateSessionTitle.call(this as never, quiet);
   }
 
-  private autoTitle(): void {
-    autoTitle.call(this as never);
+  private autoTitle(): boolean {
+    return autoTitle.call(this as never);
   }
 
   private async readSessionName(): Promise<string | null> {
@@ -557,6 +560,7 @@ export class AgentSessionWrapper {
         this.unsettled = true;
         this.promptRunning = true;
         this.streaming = true;
+        this.replyTitleRequested = false;
         this.awaitingAgentStart = false;
         this.awaitingAgentStartDeadline = 0;
         this.continuationGraceUntil = 0;
@@ -575,6 +579,17 @@ export class AgentSessionWrapper {
           this.signalWhenSessionFileAppears();
         }
         break;
+      case "message_update": {
+        // omp's terminal UI names a session once the reply to the operator's
+        // message starts a text or tool-call block, not when the turn ends: a
+        // long first turn would otherwise leave the sidebar on the raw id for
+        // hours. The background `/rename` is safe mid-run (see generateSessionTitle).
+        if (!this.replyTitleRequested) {
+          const kind = (event.assistantMessageEvent as { type?: unknown } | undefined)?.type;
+          if (kind === "text_start" || kind === "toolcall_start") this.replyTitleRequested = this.autoTitle();
+        }
+        break;
+      }
       case "agent_end":
         if (event.isTerminal !== false) {
           this.streaming = false;
