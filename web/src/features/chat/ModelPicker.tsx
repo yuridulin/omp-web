@@ -1,4 +1,4 @@
-import type { ChangeEvent, JSX } from "react";
+import { useRef, type ChangeEvent, type JSX, type MouseEvent } from "react";
 import type { ModelEntry } from "@/api/agent";
 import { ChevronDownIcon, ModelIcon, ThinkingIcon } from "./icons";
 import type { ModelPickerClasses } from "./classes";
@@ -82,6 +82,8 @@ export function ModelPicker({
   onChangeModel,
   onChangeThinking,
 }: ModelPickerProps): JSX.Element {
+  const modelRef = useRef<HTMLSelectElement>(null);
+  const thinkingRef = useRef<HTMLSelectElement>(null);
   const inactive = loading || disabled;
   const groups = groupByProvider(models);
   const selectedModel = model;
@@ -100,13 +102,31 @@ export function ModelPicker({
     if (next) onChangeModel(next.provider, next.modelId);
   };
 
+  const openPicker = (
+    event: MouseEvent<HTMLLabelElement>,
+    select: HTMLSelectElement | null,
+  ): void => {
+    if (!select || event.target === select) return;
+    event.preventDefault();
+    try {
+      select.showPicker();
+    } catch {
+      select.focus();
+    }
+  };
+
   return (
     <div className={classes.picker}>
-      <label className={classes.pill} title="Model">
+      <label
+        className={classes.pill}
+        title="Model"
+        onClick={(event) => openPicker(event, modelRef.current)}
+      >
         <span className={classes.pillIcon}>
           <ModelIcon size={13} />
         </span>
         <select
+          ref={modelRef}
           className={`${classes.select} ${classes.modelSelect}`}
           value={currentModelValue}
           onChange={handleModelChange}
@@ -136,11 +156,16 @@ export function ModelPicker({
           <ChevronDownIcon size={12} />
         </span>
       </label>
-      <label className={classes.pill} title="Thinking level">
+      <label
+        className={classes.pill}
+        title="Thinking level"
+        onClick={(event) => openPicker(event, thinkingRef.current)}
+      >
         <span className={classes.pillIcon}>
           <ThinkingIcon size={13} />
         </span>
         <select
+          ref={thinkingRef}
           className={`${classes.select} ${classes.thinkingSelect}`}
           value={thinkingLevel}
           onChange={(event) => onChangeThinking(event.target.value)}
