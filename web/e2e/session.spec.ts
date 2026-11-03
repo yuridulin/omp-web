@@ -14,6 +14,13 @@ test("starts a session from the chat draft and survives a reload", async ({ page
   await projectRow.getByRole("button", { name: /^New session in / }).click();
   await expect(page.getByText("No messages yet.")).toBeVisible();
 
+  // The unsaved chat is a row in the rail and the workbench stays open.
+  const rail = page.getByRole("complementary");
+  await expect(rail.getByText("New session", { exact: true })).toBeVisible();
+  await expect(rail.locator('[aria-current="page"]')).toContainText("New session");
+  await expect(page.getByTestId("workbench-pane")).toBeVisible();
+  await expect(page.getByTitle("Open terminal")).toBeEnabled();
+
   await page.getByLabel("Message").fill(prompt);
   await page.getByRole("button", { name: "Send" }).click();
 

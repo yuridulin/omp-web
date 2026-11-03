@@ -26,6 +26,7 @@ function renderRail(overrides: Partial<Parameters<typeof RailSkin>[0]> = {}) {
     sessions: [],
     projects,
     selected: null,
+    draftId: null,
     running: new Set(),
     unseen: new Set(),
     loading: false,
@@ -61,6 +62,36 @@ describe("rail new session entry point", () => {
 
     expect(onToggleWorkspacePicker).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Search sessions" })).toBeTruthy();
+  });
+});
+
+describe("draft session", () => {
+  const draft = {
+    ...session,
+    path: "",
+    id: "__new_session__",
+    name: "New session",
+    messageCount: 0,
+    firstMessage: "",
+  } as SessionSummary;
+
+  it("shows the unsaved chat in its project and marks it active", () => {
+    renderRail({ sessions: [draft], selected: draft.id, draftId: draft.id });
+
+    expect(screen.getByText("New session")).toBeTruthy();
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toContain("New session");
+  });
+
+  it("offers no archive action for the unsaved chat", () => {
+    renderRail({ sessions: [draft], selected: draft.id, draftId: draft.id });
+
+    expect(screen.queryByRole("button", { name: "Archive New session" })).toBeNull();
+  });
+
+  it("is gone once a real session is selected", () => {
+    renderRail({ sessions: [draft], selected: null, draftId: null });
+
+    expect(document.querySelector('[aria-current="page"]')).toBeNull();
   });
 });
 

@@ -19,6 +19,7 @@ export function RailSkin({
   sessions,
   projects,
   selected,
+  draftId,
   running,
   unseen,
   loading,
@@ -88,16 +89,18 @@ export function RailSkin({
           <span className={styles.sessionName}>{item.label}</span>
           <span className={styles.sessionMeta}>{item.time}</span>
         </button>
-        <button
-          type="button"
-          className={styles.sessionAction}
-          onClick={() => onArchiveSession(item.id)}
-          onMouseDown={(event) => event.preventDefault()}
-          title={`Archive ${item.label}`}
-          aria-label={`Archive ${item.label}`}
-        >
-          <ArchiveIcon size={13} />
-        </button>
+        {item.id === draftId ? null : (
+          <button
+            type="button"
+            className={styles.sessionAction}
+            onClick={() => onArchiveSession(item.id)}
+            onMouseDown={(event) => event.preventDefault()}
+            title={`Archive ${item.label}`}
+            aria-label={`Archive ${item.label}`}
+          >
+            <ArchiveIcon size={13} />
+          </button>
+        )}
       </div>
     );
   };

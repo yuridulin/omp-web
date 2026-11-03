@@ -102,6 +102,11 @@ the UI never imports `core/`, `lib/` or `server/`.
   project root; `N` opens it from the current session or the default
   workspace. There is no separate pane and no workspace form: the first send
   creates the session and continues in the same chat.
+- While that chat has no session yet it is listed as a `New session` row in
+  its project group, marked active, with no archive action. The workbench
+  stays open on the draft workspace, keyed per workspace, so the layout and
+  file tree do not change when a chat turns into a session. Inline prompts
+  stay unavailable until the first send creates the session.
 - While idle, `Enter` sends and `Shift+Enter` inserts a newline.
 - While the agent is running, `Enter` queues a follow-up and
   `Ctrl`/`Cmd`+`Enter` steers the active turn; `Shift+Enter` still inserts a

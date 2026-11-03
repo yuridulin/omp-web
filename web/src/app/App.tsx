@@ -79,6 +79,8 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(window.location.search).get("session"));
   const [newSessionSeedCwd, setNewSessionSeedCwd] = useState<string | null>(null);
   const [newSessionEpoch, setNewSessionEpoch] = useState(0);
+  /** Cwd of the unsaved chat; the rail and workbench paint it before a session exists. */
+  const [draftCwd, setDraftCwd] = useState<string | null>(null);
   const [pendingSession, setPendingSession] = useState<PendingSession | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -104,6 +106,7 @@ export function App() {
     const next = sessionId || null;
     setSelected(next);
     setNewSessionSeedCwd(null);
+    setDraftCwd(null);
     setPendingSession(null);
     window.history.replaceState(
       null,
@@ -120,6 +123,7 @@ export function App() {
       ?? listed?.projectRoot
       ?? null;
     setNewSessionSeedCwd(seed);
+    setDraftCwd(seed);
     setNewSessionEpoch((epoch) => epoch + 1);
     setSelected(null);
     window.history.replaceState(null, "", window.location.pathname);
@@ -129,6 +133,7 @@ export function App() {
     setPendingSession({ id, cwd });
     setSelected(id);
     setNewSessionSeedCwd(null);
+    setDraftCwd(null);
     window.history.replaceState(null, "", `?session=${encodeURIComponent(id)}`);
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
     bumpStreamGeneration();
@@ -141,6 +146,7 @@ export function App() {
       <div className={styles.shell}>
         <RailColumn
           selected={selected}
+          draftCwd={draftCwd}
           pendingId={pendingSession?.id ?? null}
           onPendingListed={onPendingListed}
           onSelect={selectSession}
@@ -152,14 +158,17 @@ export function App() {
           pendingSession={pendingSummary}
           newSessionCwd={newSessionSeedCwd}
           newSessionEpoch={newSessionEpoch}
+          onDraftCwdChange={setDraftCwd}
           onSessionCreated={handleSessionCreated}
         />
-        {selected ? (
-          <WorkbenchColumn
-            selected={selected}
-            pendingCwd={pendingSession?.id === selected ? pendingSession.cwd : null}
-          />
-        ) : null}
+        <WorkbenchColumn
+          selected={selected}
+          pendingCwd={selected === null
+            ? draftCwd
+            : pendingSession?.id === selected
+              ? pendingSession.cwd
+              : null}
+        />
       </div>
       {settingsOpen ? <SettingsHost sessionId={selected} onClose={() => setSettingsOpen(false)} /> : null}
     </NotificationProvider>

@@ -72,6 +72,8 @@ interface ChatColumnProps {
   newSessionCwd: string | null;
   /** Bumps for every explicit new-session request so the draft state resets. */
   newSessionEpoch: number;
+  /** Effective workspace of the unsaved chat, reported so the shell can paint it. */
+  onDraftCwdChange: (cwd: string) => void;
   /** A first prompt created this session; the shell selects it. */
   onSessionCreated: (id: string, cwd: string) => void;
 }
@@ -81,6 +83,7 @@ export function ChatColumn({
   pendingSession,
   newSessionCwd,
   newSessionEpoch,
+  onDraftCwdChange,
   onSessionCreated,
 }: ChatColumnProps) {
   const appearance = useAppearance();
@@ -155,20 +158,33 @@ export function ChatColumn({
     setDraftCwdError(null);
     try {
       const path = await fetchDefaultCwd();
-      setDraftCwd((current) => (current.trim() === "" ? path : current));
+      setDraftCwd(path);
+      onDraftCwdChange(path);
     } catch (cause) {
       setDraftCwdError(errorMessage(cause));
     }
-  }, []);
+  }, [onDraftCwdChange]);
+
+  const applyDraftCwd = useCallback((cwd: string) => {
+    setDraftCwd(cwd);
+    onDraftCwdChange(cwd);
+  }, [onDraftCwdChange]);
+
+  // The rail and workbench paint the draft from the shell, so keep the shell's
+  // copy in step with the cwd this column resolved or validated. Declared before
+  // the epoch reset so a new draft's seed wins when both run in one commit.
+  useEffect(() => {
+    if (selected === null) onDraftCwdChange(draftCwd);
+  }, [selected, draftCwd, onDraftCwdChange]);
 
   useEffect(() => {
     if (draftEpoch.current === newSessionEpoch) return;
     draftEpoch.current = newSessionEpoch;
-    setDraftCwd(newSessionCwd ?? "");
+    applyDraftCwd(newSessionCwd ?? "");
     setDraftCwdError(null);
     setDraftModel(null);
     setDraftThinking("auto");
-  }, [newSessionEpoch, newSessionCwd]);
+  }, [newSessionEpoch, newSessionCwd, applyDraftCwd]);
 
   useEffect(() => {
     if (selected !== null || draftCwd.trim() !== "") return;
@@ -211,10 +227,10 @@ export function ChatColumn({
         let target = draftCwd.trim();
         if (target === "") {
           target = await fetchDefaultCwd();
-          setDraftCwd(target);
+          applyDraftCwd(target);
         }
         const validated = await validateCwd(target);
-        setDraftCwd(validated.cwd);
+        applyDraftCwd(validated.cwd);
         const created = await createSession({
           cwd: validated.cwd,
           ...(draftModel !== null

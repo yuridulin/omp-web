@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { archiveSession } from "@/api/agent";
-import { comparablePath } from "@/api/paths";
+import { comparablePath, rootForPath } from "@/api/paths";
 import type { SessionSummary } from "@/api/workspace";
 import { pickBrowserFolder } from "@/features/rail/pick-workspace-folder";
 import { archiveProject, registerProject } from "@/api/workspace";
@@ -11,6 +11,7 @@ import { getLayout, updateLayout } from "@/layout/layout-store";
 import { ResizeHandle } from "@/layout/ResizeHandle";
 import { useLayoutField } from "@/layout/use-layout";
 import { skinFor } from "@/skins/registry";
+import { NEW_SESSION_DRAFT_ID } from "@/state/composer-store";
 import { publishSessionCatalog } from "@/state/session-catalog";
 import { useAppearance } from "@/state/use-appearance";
 import { useRunningSessions } from "@/state/event-stream";
@@ -21,6 +22,8 @@ const EMPTY_SESSIONS: readonly SessionSummary[] = [];
 
 interface RailColumnProps {
   selected: string | null;
+  /** Workspace of the unsaved chat, shown as a draft row while it has no session. */
+  draftCwd: string | null;
   pendingId: string | null;
   onPendingListed: () => void;
   onSelect: (sessionId: string) => void;
@@ -30,6 +33,7 @@ interface RailColumnProps {
 
 export function RailColumn({
   selected,
+  draftCwd,
   pendingId,
   onPendingListed,
   onSelect,
@@ -48,6 +52,33 @@ export function RailColumn({
   const running = useRunningSessions(fallbackRunning);
   const unseen = useUnseenSessions(sessions.data?.sessions ?? EMPTY_SESSIONS, running, selected);
   const RailSkin = skinFor("rail", appearance);
+
+  const draft = useMemo<SessionSummary | null>(() => {
+    if (selected !== null) return null;
+    const cwd = draftCwd?.trim() ?? "";
+    if (cwd === "") return null;
+    const projectRoot = rootForPath(
+      (projects.data ?? []).map((project) => project.path),
+      cwd,
+    ) ?? cwd;
+    const now = new Date().toISOString();
+    return {
+      path: "",
+      id: NEW_SESSION_DRAFT_ID,
+      cwd,
+      name: "New session",
+      created: now,
+      modified: now,
+      messageCount: 0,
+      firstMessage: "",
+      projectRoot,
+    };
+  }, [selected, draftCwd, projects.data]);
+
+  const listedSessions = useMemo(
+    () => (draft ? [draft, ...(sessions.data?.sessions ?? [])] : sessions.data?.sessions ?? []),
+    [draft, sessions.data],
+  );
 
   const refreshAfterArchive = async (): Promise<void> => {
     await Promise.all([sessions.refetch(), projects.refetch()]);
@@ -118,14 +149,18 @@ export function RailColumn({
     <>
       <div className={styles.railPane} style={{ width }}>
         <RailSkin
-          sessions={sessions.data?.sessions ?? []}
+          sessions={listedSessions}
           projects={projects.data ?? []}
-          selected={selected}
+          selected={selected ?? draft?.id ?? null}
+          draftId={draft?.id ?? null}
           running={running}
           unseen={unseen}
           loading={sessions.isLoading}
           error={actionError ?? addError ?? (sessions.isError ? sessions.error.message : null)}
-          onSelect={onSelect}
+          onSelect={(sessionId) => {
+            if (draft && sessionId === draft.id) return;
+            onSelect(sessionId);
+          }}
           onNewSession={onNewSession}
           onArchiveSession={handleArchiveSession}
           onArchiveProject={handleArchiveProject}
