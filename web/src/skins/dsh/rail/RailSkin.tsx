@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildRailView, type RailSessionItem } from "@/features/rail/rail-view";
+import { basename } from "@/api/paths";
+import { buildRailView, relativeTimeLabel, type RailSessionItem } from "@/features/rail/rail-view";
 import type { RailSlotProps } from "@/slots/rail";
 import {
+  ArchiveIcon,
   ChevronIcon,
   FilterIcon,
   FolderIcon,
@@ -21,11 +23,18 @@ export function RailSkin({
   running,
   loading,
   error,
+  archivedView,
+  archived,
+  archivedLoading,
+  archivedError,
   onSelect,
   onNewSession,
   onCollapse,
   onOpenSettings,
   onAddWorkspace,
+  onToggleArchivedView,
+  onArchiveSession,
+  onArchiveProject,
 }: RailSlotProps) {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -67,21 +76,32 @@ export function RailSkin({
   const renderSession = (item: RailSessionItem) => {
     const active = item.id === selected;
     return (
-      <button
-        key={item.id}
-        type="button"
-        className={active ? `${styles.session} ${styles.sessionActive}` : styles.session}
-        onClick={() => onSelect(item.id)}
-        title={item.time ? `${item.cwd} · ${item.time}` : item.cwd}
-        aria-current={active ? "page" : undefined}
-      >
-        <span className={styles.dotSlot} aria-hidden="true">
-          {item.running ? <span className={styles.dotRunning} /> : null}
-        </span>
-        <span className={styles.sessionName}>{item.label}</span>
-        {item.projectLabel ? <span className={styles.sessionProject}>{item.projectLabel}</span> : null}
-        <span className={styles.sessionMeta}>{item.time}</span>
-      </button>
+      <div key={item.id} className={styles.sessionRow}>
+        <button
+          type="button"
+          className={active ? `${styles.session} ${styles.sessionActive}` : styles.session}
+          onClick={() => onSelect(item.id)}
+          title={item.time ? `${item.cwd} · ${item.time}` : item.cwd}
+          aria-current={active ? "page" : undefined}
+        >
+          <span className={styles.dotSlot} aria-hidden="true">
+            {item.running ? <span className={styles.dotRunning} /> : null}
+          </span>
+          <span className={styles.sessionName}>{item.label}</span>
+          {item.projectLabel ? <span className={styles.sessionProject}>{item.projectLabel}</span> : null}
+          <span className={styles.sessionMeta}>{item.time}</span>
+        </button>
+        <button
+          type="button"
+          className={styles.sessionAction}
+          onClick={() => onArchiveSession(item.id)}
+          onMouseDown={(event) => event.preventDefault()}
+          title={`Archive ${item.label}`}
+          aria-label={`Archive ${item.label}`}
+        >
+          <ArchiveIcon size={13} />
+        </button>
+      </div>
     );
   };
 
@@ -156,6 +176,18 @@ export function RailSkin({
               <FilterIcon size={15} />
             </button>
           )}
+          {searchOpen ? null : (
+            <button
+              type="button"
+              className={archivedView ? `${styles.iconButton} ${styles.iconButtonActive}` : styles.iconButton}
+              onClick={onToggleArchivedView}
+              title={archivedView ? "Show live sessions" : "Show archived sessions"}
+              aria-label={archivedView ? "Show live sessions" : "Show archived sessions"}
+              aria-pressed={archivedView}
+            >
+              <ArchiveIcon size={15} />
+            </button>
+          )}
           <button
             type="button"
             className={styles.iconButton}
@@ -172,7 +204,31 @@ export function RailSkin({
         {error ? <p className={styles.error}>{error}</p> : null}
         {loading && sessions.length === 0 ? <p className={styles.muted}>Loading sessions…</p> : null}
 
-        {view.active.length > 0 ? (
+        {archivedView ? (
+          <section className={styles.section}>
+            <div className={styles.sectionLabelRow}>
+              <span className={styles.sectionLabel}>Archived</span>
+              <span className={styles.sectionCount}>{archived.length}</span>
+            </div>
+            {archivedError ? <p className={styles.error}>{archivedError}</p> : null}
+            {archivedLoading && archived.length === 0 ? (
+              <p className={styles.muted}>Loading archive…</p>
+            ) : null}
+            {archived.map((item) => (
+              <div key={item.key} className={styles.archiveRow} title={item.cwd}>
+                <span className={styles.sessionName}>{item.name?.trim() || item.id.slice(0, 8)}</span>
+                <span className={styles.archiveMeta}>
+                  {basename(item.cwd)} · {relativeTimeLabel(item.archivedAt)}
+                </span>
+              </div>
+            ))}
+            {!archivedLoading && !archivedError && archived.length === 0 ? (
+              <p className={styles.muted}>No archived sessions</p>
+            ) : null}
+          </section>
+        ) : null}
+
+        {!archivedView && view.active.length > 0 ? (
           <section className={styles.section}>
             <div className={styles.sectionLabelRow}>
               <span className={styles.sectionLabel}>Active</span>
@@ -182,7 +238,7 @@ export function RailSkin({
           </section>
         ) : null}
 
-        {view.groups.map((group) => {
+        {archivedView ? null : view.groups.map((group) => {
           const isCollapsed = collapsed.has(group.key);
           return (
             <section key={group.key} className={styles.section}>
@@ -191,19 +247,14 @@ export function RailSkin({
                   type="button"
                   className={styles.groupHeader}
                   onClick={() => toggleGroup(group.key)}
+                  onMouseDown={(event) => event.preventDefault()}
                   title={group.path}
                   aria-expanded={!isCollapsed}
                 >
-                  <span className={isCollapsed ? `${styles.chevron} ${styles.chevronCollapsed}` : styles.chevron}>
-                    <ChevronIcon size={12} />
-                  </span>
                   <span className={styles.groupIcon}>
                     <FolderIcon size={14} />
                   </span>
                   <span className={styles.groupLabel}>{group.label}</span>
-                  {group.sessions.length > 0 ? (
-                    <span className={styles.groupCount}>{group.sessions.length}</span>
-                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -214,6 +265,28 @@ export function RailSkin({
                 >
                   <PlusIcon size={13} />
                 </button>
+                <button
+                  type="button"
+                  className={styles.groupArchive}
+                  onClick={() => onArchiveProject(group.path)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  title={`Archive project ${group.label}`}
+                  aria-label={`Archive project ${group.label}`}
+                >
+                  <ArchiveIcon size={13} />
+                </button>
+                <button
+                  type="button"
+                  className={styles.groupChevron}
+                  onClick={() => toggleGroup(group.key)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                >
+                  <span className={isCollapsed ? `${styles.chevron} ${styles.chevronCollapsed}` : styles.chevron}>
+                    <ChevronIcon size={12} />
+                  </span>
+                </button>
               </div>
               {isCollapsed ? null : (
                 <div className={styles.groupSessions}>{group.sessions.map(renderSession)}</div>
@@ -222,7 +295,7 @@ export function RailSkin({
           );
         })}
 
-        {empty ? (
+        {!archivedView && empty ? (
           <p className={styles.muted}>
             {runningOnly ? "No running sessions" : query.trim() ? "No matching sessions" : "No sessions"}
           </p>

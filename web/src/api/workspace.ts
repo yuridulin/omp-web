@@ -224,6 +224,21 @@ export async function registerProject(cwd: string): Promise<void> {
   if (error) throw new Error(errorMessage(error, response.status));
 }
 
+type ProjectArchivePayload = NonNullable<
+  paths["/api/workspace/projects/archive"]["post"]["responses"][200]["content"]["application/json"]
+>;
+export type ProjectArchiveResult = ProjectArchivePayload;
+
+/** Archive every session of a project and hide the project. */
+export async function archiveProject(cwd: string): Promise<ProjectArchiveResult> {
+  const { data, error, response } = await api.POST("/api/workspace/projects/archive", {
+    body: { cwd },
+  });
+  if (error) throw new Error(errorMessage(error, response.status));
+  if (!data) throw new Error("Unexpected empty project archive response");
+  return data;
+}
+
 export async function fetchGitStatus(cwd: string): Promise<GitStatus> {
   const { data, error, response } = await api.GET("/api/workspace/git/status", {
     params: { query: { cwd } },

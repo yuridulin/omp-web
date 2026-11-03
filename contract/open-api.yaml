@@ -10871,6 +10871,92 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/workspace/projects/archive:
+    post:
+      summary: Archive every session of a project and hide the project from the sidebar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cwd:
+                  type: string
+              required:
+                - cwd
+              additionalProperties: {}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projectRoot:
+                    type: string
+                  archived:
+                    type: array
+                    items:
+                      type: string
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        error:
+                          type: string
+                      required:
+                        - id
+                        - error
+                      additionalProperties: {}
+                  hidden:
+                    type: boolean
+                required:
+                  - projectRoot
+                  - archived
+                  - failed
+                  - hidden
+                additionalProperties: {}
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                required:
+                  - error
+                  - code
+                additionalProperties: {}
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                required:
+                  - error
+                  - code
+                additionalProperties: {}
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/workspace/projects/clone:
     post:
       summary: Clone a Git repository into a parent directory, streaming NDJSON frames (output chunks then done / cancelled / error)

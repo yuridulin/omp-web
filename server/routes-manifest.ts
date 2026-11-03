@@ -72,6 +72,7 @@ export const routeModules: Record<string, () => Promise<Record<string, unknown>>
   "workspace/lsp/diagnostics/route.ts": () => import("./routes/workspace/lsp/diagnostics/route.ts"),
   "workspace/lsp/documents/route.ts": () => import("./routes/workspace/lsp/documents/route.ts"),
   "workspace/media/[hash]/route.ts": () => import("./routes/workspace/media/[hash]/route.ts"),
+  "workspace/projects/archive/route.ts": () => import("./routes/workspace/projects/archive/route.ts"),
   "workspace/projects/clone/route.ts": () => import("./routes/workspace/projects/clone/route.ts"),
   "workspace/projects/route.ts": () => import("./routes/workspace/projects/route.ts"),
   "workspace/worktrees/route.ts": () => import("./routes/workspace/worktrees/route.ts"),

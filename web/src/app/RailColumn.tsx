@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { archiveSession } from "@/api/agent";
+import { comparablePath } from "@/api/paths";
 import { pickBrowserFolder } from "@/features/rail/pick-workspace-folder";
-import { registerProject } from "@/api/workspace";
+import { archiveProject, registerProject } from "@/api/workspace";
 import { useProjects } from "@/features/projects/use-projects";
+import { useArchivedSessions } from "@/features/sessions/use-archived-sessions";
 import { useSessions } from "@/features/sessions/use-sessions";
 import { getLayout, updateLayout } from "@/layout/layout-store";
 import { ResizeHandle } from "@/layout/ResizeHandle";
@@ -37,10 +41,57 @@ export function RailColumn({
   const sessions = useSessions();
   const projects = useProjects();
   const [addError, setAddError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [archivedView, setArchivedView] = useState(false);
+  const queryClient = useQueryClient();
+  const archived = useArchivedSessions(archivedView);
   const adding = useRef(false);
   const fallbackRunning = sessions.data?.runningSessionIds ?? EMPTY_RUNNING;
   const running = useRunningSessions(fallbackRunning);
   const RailSkin = skinFor("rail", appearance);
+
+  const refreshAfterArchive = async (): Promise<void> => {
+    await Promise.all([sessions.refetch(), projects.refetch()]);
+    void queryClient.invalidateQueries({ queryKey: ["archived-sessions"] });
+  };
+
+  const closeIfArchived = (projectPath: string, sessionIds: readonly string[]): void => {
+    if (!selected) return;
+    const open = sessions.data?.sessions.find((item) => item.id === selected);
+    if (!open) return;
+    const matchesSession = sessionIds.includes(open.id);
+    const matchesProject = comparablePath(open.projectRoot ?? open.cwd) === comparablePath(projectPath);
+    if (matchesSession || matchesProject) onSelect("");
+  };
+
+  const handleArchiveSession = (sessionId: string): void => {
+    setActionError(null);
+    void archiveSession(sessionId)
+      .then(async () => {
+        if (sessionId === selected) onSelect("");
+        await refreshAfterArchive();
+      })
+      .catch((cause: unknown) => {
+        setActionError(cause instanceof Error ? cause.message : "Unable to archive this session");
+      });
+  };
+
+  const handleArchiveProject = (projectPath: string): void => {
+    setActionError(null);
+    void archiveProject(projectPath)
+      .then(async (result) => {
+        closeIfArchived(projectPath, result.archived);
+        if (result.failed.length > 0) {
+          setActionError(
+            `${result.failed.length} session${result.failed.length === 1 ? "" : "s"} could not be archived`,
+          );
+        }
+        await refreshAfterArchive();
+      })
+      .catch((cause: unknown) => {
+        setActionError(cause instanceof Error ? cause.message : "Unable to archive this project");
+      });
+  };
 
   useEffect(() => {
     publishSessionCatalog(sessions.data?.sessions ?? [], projects.data ?? []);
@@ -74,9 +125,19 @@ export function RailColumn({
           selected={selected}
           running={running}
           loading={sessions.isLoading}
-          error={addError ?? (sessions.isError ? sessions.error.message : null)}
+          error={actionError ?? addError ?? (sessions.isError ? sessions.error.message : null)}
+          archivedView={archivedView}
+          archived={archived.data ?? []}
+          archivedLoading={archived.isFetching}
+          archivedError={archived.isError ? archived.error.message : null}
           onSelect={onSelect}
           onNewSession={onNewSession}
+          onToggleArchivedView={() => {
+            setActionError(null);
+            setArchivedView((value) => !value);
+          }}
+          onArchiveSession={handleArchiveSession}
+          onArchiveProject={handleArchiveProject}
           onRefresh={() => {
             void sessions.refetch();
             void projects.refetch();

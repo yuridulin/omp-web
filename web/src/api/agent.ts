@@ -131,6 +131,27 @@ export async function ensureLiveSession(sessionId: string): Promise<void> {
   await postCommand(sessionId, "get_state");
 }
 
+type ArchivedPayload = NonNullable<
+  paths["/api/agent/sessions/archive"]["get"]["responses"][200]["content"]["application/json"]
+>;
+export type ArchivedSessionSummary = ArchivedPayload["archives"][number];
+
+/** Sessions already moved to omp's gzip archive tree, newest first. */
+export async function fetchArchivedSessions(): Promise<ArchivedSessionSummary[]> {
+  const { data, error, response } = await api.GET("/api/agent/sessions/archive");
+  if (error) throw new Error(errorInfo(error, response.status).message);
+  if (!data) throw new Error("Unexpected empty archive response");
+  return data.archives;
+}
+
+/** Stop the live child and move the session (plus artifacts) into the archive. */
+export async function archiveSession(sessionId: string): Promise<void> {
+  const { error, response } = await api.POST("/api/agent/sessions/{id}/archive", {
+    params: { path: { id: sessionId } },
+  });
+  if (error) throw new Error(errorInfo(error, response.status).message);
+}
+
 export async function dispatchIntent(
   sessionId: string,
   intent: ChatIntentBody,

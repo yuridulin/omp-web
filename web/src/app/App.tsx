@@ -144,13 +144,18 @@ export function App() {
   const onPendingListed = useCallback(() => setPendingSession(null), []);
 
   const selectSession = (sessionId: string) => {
-    setSelected(sessionId);
+    const next = sessionId || null;
+    setSelected(next);
     setNewSession(false);
     setNewSessionSeedCwd(null);
     setPendingSession(null);
     setCreateError(null);
     setStartError(null);
-    window.history.replaceState(null, "", `?session=${encodeURIComponent(sessionId)}`);
+    window.history.replaceState(
+      null,
+      "",
+      next ? `?session=${encodeURIComponent(next)}` : window.location.pathname,
+    );
   };
 
   const openNewSession = (projectPath?: string) => {

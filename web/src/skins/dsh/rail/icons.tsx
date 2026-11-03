@@ -62,6 +62,16 @@ export function RefreshIcon(props: Props) {
   );
 }
 
+export function ArchiveIcon(props: Props) {
+  return (
+    <Icon {...props}>
+      <rect x="3.5" y="4.5" width="17" height="4" rx="1" />
+      <path d="M5 8.5V18a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18V8.5" />
+      <path d="M10 12.5h4" />
+    </Icon>
+  );
+}
+
 export function FolderIcon(props: Props) {
   return (
     <Icon {...props}>
