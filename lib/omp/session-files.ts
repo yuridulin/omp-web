@@ -37,6 +37,7 @@ import {
   SESSION_LIST_PREFIX_BYTES,
   SESSION_LIST_SUFFIX_BYTES,
   firstUserMessageFromLines,
+  scanLastTurnBoundary,
   scanSessionInfo as scanSessionWindows,
   type ScannedSessionInfo,
   type SessionStatus,
@@ -542,6 +543,91 @@ function readTextSlices(
 }
 
 /**
+ * The fixed tail window can hold nothing but mid-turn entries: a long tool
+ * loop (large tool results) pushes the last prompt or finished answer past it.
+ * Grow the window until a turn boundary shows up or the cap is hit. During a
+ * turn the boundary is the prompt, so this reads only the current turn's
+ * bytes; a finished turn has its answer at the file end.
+ */
+const TURN_BOUNDARY_MAX_BYTES = 4 * 1024 * 1024;
+/** Re-read a little before the memo's mark: the last append may have been torn. */
+const TURN_BOUNDARY_OVERLAP_BYTES = 64 * 1024;
+const MAX_TURN_BOUNDARY_MEMO_ENTRIES = 2048;
+
+interface TurnBoundaryMemo {
+  /** File size when the boundary was last resolved. */
+  scannedSize: number;
+  boundaryMs?: number;
+}
+
+declare global {
+  var __ompTurnBoundaryMemo: Map<string, TurnBoundaryMemo> | undefined;
+}
+
+function getTurnBoundaryMemo(): Map<string, TurnBoundaryMemo> {
+  if (!globalThis.__ompTurnBoundaryMemo) globalThis.__ompTurnBoundaryMemo = new Map();
+  return globalThis.__ompTurnBoundaryMemo;
+}
+
+function rememberTurnBoundary(filePath: string, size: number, boundary: Date | undefined): void {
+  const memo = getTurnBoundaryMemo();
+  const key = scanCacheKey(filePath);
+  memo.delete(key);
+  memo.set(key, { scannedSize: size, boundaryMs: boundary?.getTime() });
+  if (memo.size > MAX_TURN_BOUNDARY_MEMO_ENTRIES) {
+    const oldest = memo.keys().next().value;
+    if (oldest !== undefined) memo.delete(oldest);
+  }
+}
+
+function readByteRange(filePath: string, from: number, to: number): string {
+  const length = Math.max(0, to - from);
+  if (length <= 0) return "";
+  const buffer = Buffer.allocUnsafe(length);
+  const fd = openSync(filePath, "r");
+  try {
+    const read = readSync(fd, buffer, 0, length, from);
+    return buffer.subarray(0, read).toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function findLastTurnBoundary(filePath: string, size: number): Date | undefined {
+  const max = Math.min(size, TURN_BOUNDARY_MAX_BYTES);
+  for (let bytes = SESSION_LIST_SUFFIX_BYTES * 2; ; bytes *= 2) {
+    const window = Math.min(bytes, max);
+    const boundary = scanLastTurnBoundary(readByteRange(filePath, size - window, size));
+    if (boundary || window === max) return boundary;
+  }
+}
+
+/**
+ * The last prompt/answer in a file whose 32 KiB tail holds only mid-turn
+ * entries. A growing turn is incremental: once located, only appended bytes
+ * are scanned, so every persisted tool result does not re-read the turn.
+ */
+function resolveLastTurnBoundary(filePath: string, size: number): Date | undefined {
+  const memo = getTurnBoundaryMemo();
+  const cached = memo.get(scanCacheKey(filePath));
+  if (cached && cached.scannedSize <= size) {
+    // Sessions are append-only; only new bytes can hold a newer boundary.
+    const appended = scanLastTurnBoundary(
+      readByteRange(filePath, Math.max(0, cached.scannedSize - TURN_BOUNDARY_OVERLAP_BYTES), size),
+    );
+    const boundaryMs = appended !== undefined && appended.getTime() > (cached.boundaryMs ?? 0)
+      ? appended.getTime()
+      : cached.boundaryMs;
+    const boundary = boundaryMs === undefined ? undefined : new Date(boundaryMs);
+    rememberTurnBoundary(filePath, size, boundary);
+    return boundary;
+  }
+  const boundary = findLastTurnBoundary(filePath, size);
+  rememberTurnBoundary(filePath, size, boundary);
+  return boundary;
+}
+
+/**
  * Scan a single session file into an OmpSessionInfo using only a 4 KiB prefix
  * window (plus a 32 KiB tail window when `withStatus` is set). Faithful port
  * of omp's scanSessionFile — messageCount is a prefix-derived lower bound.
@@ -560,7 +646,7 @@ export function scanSessionInfo(
     );
     // Files past the load ceiling cannot be opened anyway, so skip the
     // full-file fallback that looks for a user message beyond the prefix.
-    return scanSessionWindows({
+    const info = scanSessionWindows({
       path: filePath,
       prefix,
       suffix,
@@ -569,6 +655,15 @@ export function scanSessionInfo(
       withStatus,
       scanFirstUserMessage: size <= MAX_SESSION_LOAD_BYTES ? () => scanFirstUserMessage(filePath) : undefined,
     });
+    if (!info || !withStatus) return info;
+    if (info.lastMessageAt !== undefined || size <= SESSION_LIST_SUFFIX_BYTES) {
+      rememberTurnBoundary(filePath, size, info.lastMessageAt);
+      return info;
+    }
+    // A window of only mid-turn entries: look further back for the last
+    // prompt/answer so the rail order does not follow tool results.
+    const boundary = resolveLastTurnBoundary(filePath, size);
+    return boundary ? { ...info, lastMessageAt: boundary } : info;
   } catch {
     return undefined;
   }
@@ -611,6 +706,7 @@ function getSessionScanCache(): Map<string, SessionScanCacheEntry> {
  * new window without dropping every other session's scan memo. */
 export function invalidateSessionScanCache(filePath: string): void {
   globalThis.__ompSessionScanCache?.delete(scanCacheKey(filePath));
+  globalThis.__ompTurnBoundaryMemo?.delete(scanCacheKey(filePath));
 }
 
 /** Clear EVERY per-file scan memo. Used by the full list-cache flush for
@@ -620,6 +716,7 @@ export function invalidateSessionScanCache(filePath: string): void {
  * (old title / old parent link) to the sidebar. */
 export function invalidateAllSessionScanCaches(): void {
   globalThis.__ompSessionScanCache?.clear();
+  globalThis.__ompTurnBoundaryMemo?.clear();
 }
 
 /** scanSessionInfo memoized on (path, size, mtimeMs). Callers must treat the

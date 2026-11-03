@@ -27,7 +27,8 @@ export interface ScannedSessionInfo {
   size: number;
   firstMessage: string;
   status?: SessionStatus;
-  /** Timestamp of the last message entry in the tail window (when scanned with status). */
+  /** Timestamp of the newest user prompt or finished answer in the tail window
+   *  (when scanned with status): the last turn boundary, not the last entry. */
   lastMessageAt?: Date;
 }
 
@@ -200,9 +201,13 @@ export function statusFromTailMessage(message: TailMessage): SessionStatus {
   }
 }
 
-/** The tail window's last message entry: lifecycle status plus its timestamp. */
-export function scanTailMessage(suffix: string): { status: SessionStatus; lastMessageAt?: Date } {
-  if (!suffix) return { status: "unknown" };
+interface TailMessageEntry {
+  message: TailMessage;
+  at?: Date;
+}
+
+/** A window's message entries, newest first; torn lines are skipped. */
+function* eachTailMessage(suffix: string): Generator<TailMessageEntry> {
   const lines = suffix.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
@@ -217,12 +222,48 @@ export function scanTailMessage(suffix: string): { status: SessionStatus; lastMe
     }
     if (!isRecord(entry) || entry.type !== "message" || !isRecord(entry.message)) continue;
     const at = typeof entry.timestamp === "string" ? new Date(entry.timestamp) : undefined;
-    return {
-      status: statusFromTailMessage(entry.message),
-      lastMessageAt: at && !Number.isNaN(at.getTime()) ? at : undefined,
+    yield {
+      message: entry.message as TailMessage,
+      at: at && !Number.isNaN(at.getTime()) ? at : undefined,
     };
   }
-  return { status: "unknown" };
+}
+
+/**
+ * A message that starts or ends a turn: the user prompt, or an answer that
+ * does not ask for another tool. Tool results and tool-call messages are
+ * mid-turn steps; the rail must not reorder on them.
+ */
+function isTurnBoundaryMessage(message: TailMessage): boolean {
+  if (message.role === "user") return true;
+  if (message.role !== "assistant") return false;
+  const content = message.content;
+  return !(Array.isArray(content) && content.some((block) => isRecord(block) && block.type === "toolCall"));
+}
+
+/** Newest prompt or finished answer in a window, or undefined for mid-turn windows. */
+export function scanLastTurnBoundary(suffix: string): Date | undefined {
+  for (const { message, at } of eachTailMessage(suffix)) {
+    if (isTurnBoundaryMessage(message)) return at;
+  }
+  return undefined;
+}
+
+/**
+ * The tail window's last message entry (lifecycle status) plus its newest turn
+ * boundary. `lastMessageAt` moves a session in the rail only when the user
+ * sends a prompt or an answer lands, not on every streaming update.
+ */
+export function scanTailMessage(suffix: string): { status: SessionStatus; lastMessageAt?: Date } {
+  let status: SessionStatus | undefined;
+  let lastMessageAt: Date | undefined;
+  for (const { message, at } of eachTailMessage(suffix)) {
+    status ??= statusFromTailMessage(message);
+    if (lastMessageAt === undefined && isTurnBoundaryMessage(message)) lastMessageAt = at;
+    if (status !== undefined && lastMessageAt !== undefined) break;
+  }
+  const resolved = status ?? "unknown";
+  return lastMessageAt === undefined ? { status: resolved } : { status: resolved, lastMessageAt };
 }
 
 export interface SessionListHeader {

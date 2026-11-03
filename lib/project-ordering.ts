@@ -42,7 +42,7 @@ export type ProjectSortMode = "none" | "alphabetical" | "updated";
 /** Order projects for a sort mode. In "none", pins are ignored and the manual
  *  order applies. Otherwise pinned projects come first in their pinOrder, then
  *  the rest by label (A→Z, case-insensitive, digits numerically) or by their
- *  newest session's last message time (`lastMessageAt`, else the file's
+ *  newest session's last turn boundary (`lastMessageAt`, else the file's
  *  `modified`; most recent first, projects without sessions last). Ties keep
  *  the manual order. */
 export function orderProjects(

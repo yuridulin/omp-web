@@ -443,7 +443,8 @@ export interface SessionInfo {
   name?: string;
   created: string;
   modified: string;
-  /** ISO time of the last message entry (absent when the tail scan found none). */
+  /** ISO time of the last turn boundary — the newest user prompt or finished
+   *  answer — from the tail scan (absent when the scan found none). */
   lastMessageAt?: string;
   messageCount: number;
   firstMessage: string;

@@ -3,6 +3,7 @@ import { test } from "bun:test";
 
 const {
   SESSION_LIST_PREFIX_BYTES,
+  scanLastTurnBoundary,
   scanSessionInfo,
   scanTailMessage,
   statusFromTailMessage,
@@ -128,6 +129,34 @@ test("a tail window starting mid-line and carrying torn/invalid timestamps is to
   assert.equal(invalid.status, "pending");
   assert.equal(invalid.lastMessageAt, undefined);
   assert.deepEqual(scanTailMessage(""), { status: "unknown" });
+});
+
+test("the rail timestamp moves on the prompt and the finished answer, not on mid-turn entries", () => {
+  const prompt = { type: "message", id: "u1", timestamp: "2026-01-01T00:00:01.000Z", message: { role: "user", content: "go" } };
+  const toolCall = {
+    type: "message",
+    id: "a1",
+    timestamp: "2026-01-01T00:00:05.000Z",
+    message: { role: "assistant", content: [{ type: "toolCall", toolCallId: "t", toolName: "read", input: {} }] },
+  };
+  const result = { type: "message", id: "t1", timestamp: "2026-01-01T00:00:09.000Z", message: { role: "toolResult", content: [] } };
+  const answer = {
+    type: "message",
+    id: "a2",
+    timestamp: "2026-01-01T00:00:14.000Z",
+    message: { role: "assistant", content: [{ type: "text", text: "done" }] },
+  };
+
+  const midTurn = scanTailMessage(jsonl(prompt, toolCall, result));
+  assert.equal(midTurn.status, "interrupted");
+  assert.deepEqual(midTurn.lastMessageAt, new Date("2026-01-01T00:00:01.000Z"));
+
+  const finished = scanTailMessage(jsonl(prompt, toolCall, result, answer));
+  assert.equal(finished.status, "complete");
+  assert.deepEqual(finished.lastMessageAt, new Date("2026-01-01T00:00:14.000Z"));
+
+  assert.deepEqual(scanLastTurnBoundary(jsonl(toolCall, result)), undefined);
+  assert.deepEqual(scanLastTurnBoundary(jsonl(prompt, toolCall, result, answer)), new Date("2026-01-01T00:00:14.000Z"));
 });
 
 test("statusFromTailMessage is total over unknown roles", () => {
