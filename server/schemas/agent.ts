@@ -24,6 +24,7 @@ export const sessionSummarySchema = z.looseObject({
   projectRoot: z.string().optional(),
   projectKey: z.string().optional(),
   worktreeBranch: z.string().optional(),
+  archived: z.boolean().optional(),
 });
 
 /** Session detail header projection returned by GET /sessions/[id]. */

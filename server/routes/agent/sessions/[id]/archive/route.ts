@@ -1,33 +1,36 @@
 import { z } from "zod";
 import { json } from "@/server/http";
 import { errorEnvelope, routeContract } from "@/server/contract";
-import { archiveSessionFileWithArtifacts } from "@/lib/omp/session-files";
-import {
-  invalidateSessionListCache,
-  invalidateSessionPathCache,
-  listAllSessions,
-} from "@/lib/session-reader";
 import { resolveSessionPathOr404 } from "@/lib/api-utils";
-import { clearExitedRpcSession, getRpcSession } from "@/lib/rpc-manager";
+import {
+  archiveSessions,
+  loadSessionArchiveRegistry,
+  saveSessionArchiveRegistry,
+} from "@/lib/session-archive-registry";
+import { invalidateSessionListCache } from "@/lib/session-reader";
 
 export const contract = routeContract({
   POST: {
-    summary: "Stop the live child and archive a session with its sibling artifacts",
+    summary: "Mark a session archived in omp-web (the omp session file is untouched)",
     responses: {
       200: z.looseObject({
         ok: z.literal(true),
         archived: z.literal(true),
-        archivedPath: z.string(),
       }),
       404: errorEnvelope,
-      409: errorEnvelope,
       500: errorEnvelope,
     },
   },
 });
 
-/** POST /api/agent/sessions/[id]/archive — stop the live child, then archive the
- * native OMP JSONL and its sibling artifacts using OMP's gc layout. */
+/**
+ * POST /api/agent/sessions/[id]/archive — UI-only marker.
+ *
+ * Archiving changes nothing for omp: the child keeps running, the JSONL and its
+ * artifacts stay in the active sessions tree, and the session remains readable
+ * and resumable. Only the rail stops painting the row, so no live child is
+ * stopped and no file is moved.
+ */
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -36,27 +39,13 @@ export async function POST(
   try {
     const resolved = await resolveSessionPathOr404(id);
     if ("notFound" in resolved) return json(resolved.notFound, { status: 404 });
-    const filePath = resolved.filePath;
-    // Parent-session paths are native branch metadata. Moving only a parent
-    // would leave active children pointing at a path that no longer exists,
-    // flattening their tree in the sidebar. Archive leaves first instead.
-    const hasChildren = (await listAllSessions()).some((session) => session.parentSessionId === id);
-    if (hasChildren) {
-      return json(
-        { error: "Archive child sessions before archiving this session", code: "session_has_children" },
-        { status: 409 },
-      );
-    }
 
-    // OMP owns writes while a child is live; wait for its final flush before
-    // moving the file so the archive contains the complete native transcript.
-    await getRpcSession(id)?.destroyAndWait?.();
-    const archivedPath = archiveSessionFileWithArtifacts(filePath);
-    clearExitedRpcSession(id);
-    invalidateSessionPathCache(id);
-    // The file is gone: full flush is correct (drops its caches + refreshes list).
+    const registry = loadSessionArchiveRegistry();
+    const next = archiveSessions(registry, [id]);
+    if (next !== registry) saveSessionArchiveRegistry(next);
+    // The list ships the archived flag, so its 30s cache must drop.
     invalidateSessionListCache();
-    return json({ ok: true, archived: true, archivedPath });
+    return json({ ok: true, archived: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return json({ error: message, code: "session_archive_failed" }, { status: 500 });

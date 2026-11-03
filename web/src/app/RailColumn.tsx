@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { archiveSession } from "@/api/agent";
-import { comparablePath, rootForPath } from "@/api/paths";
+import { rootForPath } from "@/api/paths";
 import type { SessionSummary } from "@/api/workspace";
 import { pickBrowserFolder } from "@/features/rail/pick-workspace-folder";
 import { archiveProject, registerProject } from "@/api/workspace";
@@ -18,7 +18,6 @@ import { useRunningSessions } from "@/state/event-stream";
 import styles from "./app.module.css";
 
 const EMPTY_RUNNING: string[] = [];
-const EMPTY_SESSIONS: readonly SessionSummary[] = [];
 
 interface RailColumnProps {
   selected: string | null;
@@ -50,7 +49,11 @@ export function RailColumn({
   const adding = useRef(false);
   const fallbackRunning = sessions.data?.runningSessionIds ?? EMPTY_RUNNING;
   const running = useRunningSessions(fallbackRunning);
-  const unseen = useUnseenSessions(sessions.data?.sessions ?? EMPTY_SESSIONS, running, selected);
+  const visibleSessions = useMemo(
+    () => (sessions.data?.sessions ?? []).filter((session) => !session.archived),
+    [sessions.data],
+  );
+  const unseen = useUnseenSessions(visibleSessions, running, selected);
   const RailSkin = skinFor("rail", appearance);
 
   const draft = useMemo<SessionSummary | null>(() => {
@@ -76,30 +79,18 @@ export function RailColumn({
   }, [selected, draftCwd, projects.data]);
 
   const listedSessions = useMemo(
-    () => (draft ? [draft, ...(sessions.data?.sessions ?? [])] : sessions.data?.sessions ?? []),
-    [draft, sessions.data],
+    () => (draft ? [draft, ...visibleSessions] : visibleSessions),
+    [draft, visibleSessions],
   );
 
   const refreshAfterArchive = async (): Promise<void> => {
     await Promise.all([sessions.refetch(), projects.refetch()]);
   };
 
-  const closeIfArchived = (projectPath: string, sessionIds: readonly string[]): void => {
-    if (!selected) return;
-    const open = sessions.data?.sessions.find((item) => item.id === selected);
-    if (!open) return;
-    const matchesSession = sessionIds.includes(open.id);
-    const matchesProject = comparablePath(open.projectRoot ?? open.cwd) === comparablePath(projectPath);
-    if (matchesSession || matchesProject) onSelect("");
-  };
-
   const handleArchiveSession = (sessionId: string): void => {
     setActionError(null);
     void archiveSession(sessionId)
-      .then(async () => {
-        if (sessionId === selected) onSelect("");
-        await refreshAfterArchive();
-      })
+      .then(refreshAfterArchive)
       .catch((cause: unknown) => {
         setActionError(cause instanceof Error ? cause.message : "Unable to archive this session");
       });
@@ -108,15 +99,7 @@ export function RailColumn({
   const handleArchiveProject = (projectPath: string): void => {
     setActionError(null);
     void archiveProject(projectPath)
-      .then(async (result) => {
-        closeIfArchived(projectPath, result.archived);
-        if (result.failed.length > 0) {
-          setActionError(
-            `${result.failed.length} session${result.failed.length === 1 ? "" : "s"} could not be archived`,
-          );
-        }
-        await refreshAfterArchive();
-      })
+      .then(refreshAfterArchive)
       .catch((cause: unknown) => {
         setActionError(cause instanceof Error ? cause.message : "Unable to archive this project");
       });

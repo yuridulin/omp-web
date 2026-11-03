@@ -18,8 +18,8 @@ export interface RailSlotProps {
   onOpenSettings: () => void;
   /** Opens the browser folder dialog and registers the chosen directory. */
   onAddWorkspace: () => void;
-  /** Archives the session and closes it if it is the open one. */
+  /** Marks the session archived; the open chat keeps running and stays open. */
   onArchiveSession: (sessionId: string) => void;
-  /** Archives every session of the project and hides the project. */
+  /** Marks every session of the project archived and hides the project. */
   onArchiveProject: (projectPath: string) => void;
 }

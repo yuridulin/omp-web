@@ -4,12 +4,10 @@ import {
   closeSync,
   existsSync,
   mkdtempSync,
-  mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
   readSync,
-  lstatSync,
   renameSync,
   rmSync,
   rmdirSync,
@@ -21,7 +19,6 @@ import {
 import * as fsRuntime from "fs";
 import * as path from "path";
 import { StringDecoder } from "string_decoder";
-import { gunzipSync, gzipSync } from "zlib";
 import {
   SESSION_TITLE_SLOT_BYTES,
   buildSessionTree,
@@ -64,7 +61,7 @@ import type {
   SessionHeader,
   SessionTitleSource,
 } from "../types";
-import { getArchivedSessionsDir, getBlobsDir, getSessionsDir } from "./paths";
+import { getBlobsDir, getSessionsDir } from "./paths";
 import { sessionPathKey } from "../paths";
 
 /**
@@ -956,94 +953,6 @@ export function writeSessionFileAtomicSync(filePath: string, body: string, tag =
     } catch {
       rmSync(tempDir, { recursive: true, force: true });
     }
-  }
-}
-
-export interface SessionArchiveRoots {
-  /** Override the active sessions root for tests or an injected filesystem. */
-  sessionsRoot?: string;
-  /** Override the OMP archive root for tests or an injected filesystem. */
-  archiveRoot?: string;
-}
-
-/**
- * Archive one native OMP session using the same layout as `omp gc --archive`:
- * the JSONL is gzip-compressed below `<agent>/archive/sessions`, while its
- * sibling artifacts directory is moved alongside the compressed file. The
- * source file remains byte-for-byte unchanged until the compressed destination
- * is durably renamed; failures roll back both moves where possible.
- */
-export function archiveSessionFileWithArtifacts(filePath: string, roots: SessionArchiveRoots = {}): string {
-  const sessionsRoot = path.resolve(roots.sessionsRoot ?? getSessionsDir());
-  const source = path.resolve(filePath);
-  const relative = path.relative(sessionsRoot, source);
-  if (
-    !relative ||
-    relative.startsWith(".." + path.sep) ||
-    path.isAbsolute(relative) ||
-    !relative.endsWith(".jsonl")
-  ) {
-    throw new Error("Session path is outside the active OMP sessions directory");
-  }
-  if (!lstatSync(source).isFile()) throw new Error("Session path is not a regular file");
-
-  const archiveRoot = path.resolve(roots.archiveRoot ?? getArchivedSessionsDir());
-  const destination = path.join(archiveRoot, `${relative}.gz`);
-  const legacyDestination = destination.slice(0, -3);
-  if (existsSync(destination) || existsSync(legacyDestination)) {
-    throw new Error("Archived session destination already exists");
-  }
-
-  const sourceArtifacts = source.slice(0, -".jsonl".length);
-  // OMP's archive convention keeps the `.jsonl` suffix on the artifacts
-  // directory after appending `.gz` to the session file.
-  const destinationArtifacts = destination.slice(0, -".gz".length);
-  mkdirSync(path.dirname(destination), { recursive: true });
-  const tempDir = mkdtempSync(path.join(path.dirname(destination), ".omp-web-archive-"));
-  const tempCompressed = path.join(tempDir, path.basename(destination));
-  const tempRestore = path.join(tempDir, path.basename(source));
-  let destinationCreated = false;
-  let sourceRemoved = false;
-  let artifactsMoved = false;
-
-  try {
-    writeFileSync(tempCompressed, gzipSync(readFileSync(source), { level: 9 }));
-    renameSync(tempCompressed, destination);
-    destinationCreated = true;
-    unlinkSync(source);
-    sourceRemoved = true;
-
-    if (existsSync(sourceArtifacts)) {
-      if (existsSync(destinationArtifacts)) throw new Error("Archived session artifacts destination already exists");
-      mkdirSync(path.dirname(destinationArtifacts), { recursive: true });
-      renameSync(sourceArtifacts, destinationArtifacts);
-      artifactsMoved = true;
-    }
-    return destination;
-  } catch (error) {
-    if (artifactsMoved) {
-      try { renameSync(destinationArtifacts, sourceArtifacts); } catch { /* preserve original error */ }
-    }
-    // Restore the source if it was already removed. Only after the restore
-    // SUCCEEDS is the archive safe to delete — if the restore fails, the
-    // archive is the only copy of the session left, and deleting it would
-    // lose both copies permanently.
-    let restored = true; // nothing to restore unless the source was removed
-    if (sourceRemoved && destinationCreated) {
-      restored = false;
-      try {
-        writeFileSync(tempRestore, gunzipSync(readFileSync(destination)));
-        mkdirSync(path.dirname(source), { recursive: true });
-        renameSync(tempRestore, source);
-        restored = true;
-      } catch { /* preserve original error */ }
-    }
-    if (destinationCreated && restored) {
-      try { unlinkSync(destination); } catch { /* preserve original error */ }
-    }
-    throw error;
-  } finally {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
   }
 }
 

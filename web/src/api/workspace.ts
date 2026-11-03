@@ -229,7 +229,7 @@ type ProjectArchivePayload = NonNullable<
 >;
 export type ProjectArchiveResult = ProjectArchivePayload;
 
-/** Archive every session of a project and hide the project. */
+/** Mark every session of a project archived and hide the project (files stay). */
 export async function archiveProject(cwd: string): Promise<ProjectArchiveResult> {
   const { data, error, response } = await api.POST("/api/workspace/projects/archive", {
     body: { cwd },

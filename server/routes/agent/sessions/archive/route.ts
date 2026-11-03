@@ -1,22 +1,27 @@
+import { statSync } from "fs";
 import { z } from "zod";
 import { json, readJson } from "@/server/http";
 import { errorEnvelope, routeContract } from "@/server/contract";
 import { archivedSessionSchema } from "@/server/schemas/agent";
 import { apiErrorBody } from "@/lib/api-utils";
-import { listArchivedSessions, restoreArchivedSession } from "@/lib/omp/archive";
-import { invalidateSessionListCache } from "@/lib/session-reader";
+import {
+  loadSessionArchiveRegistry,
+  restoreSession,
+  saveSessionArchiveRegistry,
+} from "@/lib/session-archive-registry";
+import { invalidateSessionListCache, listAllSessions } from "@/lib/session-reader";
 import type { ArchivedSessionInfo } from "@/lib/types";
 
 export const contract = routeContract({
   GET: {
-    summary: "List archived (gzip) sessions from omp's archive tree",
+    summary: "List sessions marked archived in omp-web",
     responses: {
       200: z.looseObject({ archives: z.array(archivedSessionSchema) }),
       500: errorEnvelope,
     },
   },
   POST: {
-    summary: "Restore an archived session back into the active session list",
+    summary: "Restore an archived session (clears the omp-web archive marker)",
     request: {
       body: z.looseObject({ key: z.string() }),
     },
@@ -24,7 +29,6 @@ export const contract = routeContract({
       200: z.looseObject({ ok: z.literal(true), sessionId: z.string() }),
       400: errorEnvelope,
       404: errorEnvelope,
-      409: errorEnvelope,
       500: errorEnvelope,
     },
   },
@@ -32,19 +36,33 @@ export const contract = routeContract({
 
 export async function GET() {
   try {
-    const archives = await listArchivedSessions();
-    const response: ArchivedSessionInfo[] = archives.map((archive) => ({
-      key: archive.key,
-      id: archive.id,
-      cwd: archive.cwd,
-      ...(archive.title ? { name: archive.title } : {}),
-      created: archive.created.toISOString(),
-      archivedAt: archive.archivedAt.toISOString(),
-      messageCount: archive.messageCount,
-      firstMessage: archive.firstMessage,
-      size: archive.size,
-      status: archive.status,
-    }));
+    const sessions = await listAllSessions();
+    const times = new Map(
+      loadSessionArchiveRegistry().sessions.map((entry) => [entry.id, entry.archivedAt]),
+    );
+    const response: ArchivedSessionInfo[] = [];
+    for (const session of sessions) {
+      const archivedAt = times.get(session.id);
+      if (!archivedAt) continue;
+      let size = 0;
+      try {
+        size = statSync(session.path).size;
+      } catch {
+        // The file vanished between the scan and the stat; the row stays usable.
+      }
+      response.push({
+        key: session.id,
+        id: session.id,
+        cwd: session.cwd,
+        ...(session.name ? { name: session.name } : {}),
+        created: session.created,
+        archivedAt,
+        messageCount: session.messageCount,
+        firstMessage: session.firstMessage,
+        size,
+      });
+    }
+    response.sort((a, b) => Date.parse(b.archivedAt) - Date.parse(a.archivedAt));
     return json({ archives: response }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return json(apiErrorBody(error), { status: 500 });
@@ -59,12 +77,16 @@ export async function POST(req: Request) {
     if (typeof body.key !== "string" || !body.key.trim()) {
       return json({ error: "Archive key is required", code: "archive_key_required" }, { status: 400 });
     }
-    const sessionId = restoreArchivedSession(body.key);
+    const sessionId = body.key.trim();
+    const registry = loadSessionArchiveRegistry();
+    const next = restoreSession(registry, sessionId);
+    if (next === registry) {
+      return json({ error: "Archived session not found", code: "archive_not_found" }, { status: 404 });
+    }
+    saveSessionArchiveRegistry(next);
     invalidateSessionListCache();
     return json({ ok: true, sessionId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const status = message.includes("Invalid archive key") || message.includes("required") ? 400 : message.includes("not found") ? 404 : message.includes("already exists") ? 409 : 500;
-    return json({ error: message, code: "archive_restore_failed" }, { status });
+    return json(apiErrorBody(error), { status: 500 });
   }
 }

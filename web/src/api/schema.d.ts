@@ -844,6 +844,7 @@ export interface paths {
                                 projectRoot?: string;
                                 projectKey?: string;
                                 worktreeBranch?: string;
+                                archived?: boolean;
                             } & {
                                 [key: string]: unknown;
                             })[];
@@ -1239,7 +1240,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stop the live child and archive a session with its sibling artifacts */
+        /** Mark a session archived in omp-web (the omp session file is untouched) */
         post: {
             parameters: {
                 query?: never;
@@ -1262,7 +1263,6 @@ export interface paths {
                             ok: true;
                             /** @constant */
                             archived: true;
-                            archivedPath: string;
                         } & {
                             [key: string]: unknown;
                         };
@@ -1270,20 +1270,6 @@ export interface paths {
                 };
                 /** @description Not Found */
                 404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                            code: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Conflict */
-                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2479,7 +2465,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List archived (gzip) sessions from omp's archive tree */
+        /** List sessions marked archived in omp-web */
         get: {
             parameters: {
                 query?: never;
@@ -2542,7 +2528,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Restore an archived session back into the active session list */
+        /** Restore an archived session (clears the omp-web archive marker) */
         post: {
             parameters: {
                 query?: never;
@@ -2591,20 +2577,6 @@ export interface paths {
                 };
                 /** @description Not Found */
                 404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                            code: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Conflict */
-                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -10007,7 +9979,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Archive every session of a project and hide the project from the sidebar */
+        /** Mark every session of a project archived and hide the project from the sidebar */
         post: {
             parameters: {
                 query?: never;
@@ -10034,13 +10006,6 @@ export interface paths {
                         "application/json": {
                             projectRoot: string;
                             archived: string[];
-                            failed: ({
-                                id: string;
-                                error: string;
-                            } & {
-                                [key: string]: unknown;
-                            })[];
-                            hidden: boolean;
                         } & {
                             [key: string]: unknown;
                         };

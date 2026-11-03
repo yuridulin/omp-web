@@ -74,11 +74,6 @@ export function getSessionsDir(): string {
   return agentDataSubdir("sessions");
 }
 
-/** OMP's gc archive root for compressed session JSONL files. */
-export function getArchivedSessionsDir(): string {
-  return path.join(path.dirname(getSessionsDir()), "archive", "sessions");
-}
-
 /** Content-addressed blob store referenced from session entries. */
 export function getBlobsDir(): string {
   return agentDataSubdir("blobs");

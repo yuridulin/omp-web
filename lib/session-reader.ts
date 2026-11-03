@@ -32,6 +32,7 @@ import { projectIdentityKey, sessionPathKey } from "./paths";
 import { resolveProject, type ProjectInfo } from "./worktree";
 import { selectHistoryRange, selectOlderRange, selectTailRange, type SessionHistoryCursor, type SessionHistoryPage } from "./session-sync";
 import { PASSIVE_TOOL_CONTEXT } from "../core/display";
+import { loadSessionArchiveRegistry } from "./session-archive-registry";
 
 export { getAgentDir };
 
@@ -74,6 +75,8 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
     }));
   }
 
+  const archived = new Set(loadSessionArchiveRegistry().sessions.map((entry) => entry.id));
+
   return ompSessions.map((s) => {
     cacheSessionPath(s.id, s.path);
     const project = s.cwd ? projectByCwd.get(s.cwd) : undefined;
@@ -96,6 +99,8 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       projectRoot: project?.projectRoot ?? s.cwd,
       projectKey: projectIdentityKey(project?.projectRoot ?? s.cwd),
       ...(project?.isWorktree && project.branch ? { worktreeBranch: project.branch } : {}),
+      // UI-only marker: the file stays active, the rail hides the row.
+      ...(archived.has(s.id) ? { archived: true } : {}),
     };
   });
 }

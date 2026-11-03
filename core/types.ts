@@ -457,9 +457,13 @@ export interface SessionInfo {
   projectKey?: string;
   /** Branch name when cwd is a linked git worktree (not the main checkout) */
   worktreeBranch?: string;
+  /** Marked archived in omp-web's own registry. The session file is untouched
+   *  and stays readable; only the rail hides the row. */
+  archived?: boolean;
 }
 
-/** Metadata for a gzip-compressed session in OMP's archive tree. */
+/** Metadata for a session marked archived in omp-web. `key` is the restore key
+ *  and equals `id`; the session file itself is not compressed or moved. */
 export interface ArchivedSessionInfo {
   key: string;
   id: string;

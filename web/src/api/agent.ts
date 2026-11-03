@@ -146,7 +146,7 @@ export async function ensureLiveSession(sessionId: string): Promise<void> {
   await postCommand(sessionId, "get_state");
 }
 
-/** Stop the live child and move the session (plus artifacts) into the archive. */
+/** Mark the session archived in omp-web; the omp session file is untouched. */
 export async function archiveSession(sessionId: string): Promise<void> {
   const { error, response } = await api.POST("/api/agent/sessions/{id}/archive", {
     params: { path: { id: sessionId } },

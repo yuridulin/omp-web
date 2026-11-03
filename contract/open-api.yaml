@@ -973,6 +973,8 @@ paths:
                           type: string
                         worktreeBranch:
                           type: string
+                        archived:
+                          type: boolean
                       required:
                         - path
                         - id
@@ -1405,7 +1407,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
   /api/agent/sessions/{id}/archive:
     post:
-      summary: Stop the live child and archive a session with its sibling artifacts
+      summary: Mark a session archived in omp-web (the omp session file is untouched)
       parameters:
         - name: id
           in: path
@@ -1426,30 +1428,12 @@ paths:
                   archived:
                     type: boolean
                     const: true
-                  archivedPath:
-                    type: string
                 required:
                   - ok
                   - archived
-                  - archivedPath
                 additionalProperties: {}
         "404":
           description: Not Found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  code:
-                    type: string
-                required:
-                  - error
-                  - code
-                additionalProperties: {}
-        "409":
-          description: Conflict
           content:
             application/json:
               schema:
@@ -2793,7 +2777,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
   /api/agent/sessions/archive:
     get:
-      summary: List archived (gzip) sessions from omp's archive tree
+      summary: List sessions marked archived in omp-web
       responses:
         "200":
           description: OK
@@ -2869,7 +2853,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
     post:
-      summary: Restore an archived session back into the active session list
+      summary: Restore an archived session (clears the omp-web archive marker)
       requestBody:
         required: true
         content:
@@ -2916,21 +2900,6 @@ paths:
                 additionalProperties: {}
         "404":
           description: Not Found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  code:
-                    type: string
-                required:
-                  - error
-                  - code
-                additionalProperties: {}
-        "409":
-          description: Conflict
           content:
             application/json:
               schema:
@@ -10886,7 +10855,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
   /api/workspace/projects/archive:
     post:
-      summary: Archive every session of a project and hide the project from the sidebar
+      summary: Mark every session of a project archived and hide the project from the sidebar
       requestBody:
         required: true
         content:
@@ -10913,26 +10882,9 @@ paths:
                     type: array
                     items:
                       type: string
-                  failed:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                        error:
-                          type: string
-                      required:
-                        - id
-                        - error
-                      additionalProperties: {}
-                  hidden:
-                    type: boolean
                 required:
                   - projectRoot
                   - archived
-                  - failed
-                  - hidden
                 additionalProperties: {}
         "400":
           description: Bad Request
