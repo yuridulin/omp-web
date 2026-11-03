@@ -35,6 +35,27 @@ export interface TranscriptClasses {
   toolBody: string;
   toolArgs: string;
   toolOutput: string;
+  /* Tool block shell: header chip, title, quiet facts, outcome. */
+  toolBadge: string;
+  toolTitle: string;
+  toolMeta: string;
+  toolBlockStatus: string;
+  toolSection: string;
+  toolCode: string;
+  toolFold: string;
+  toolDiff: string;
+  toolDiffRow: string;
+  toolDiffLineNo: string;
+  toolDiffMark: string;
+  toolDiffText: string;
+  toolDiffEmphasis: string;
+  toolDiffGap: string;
+  toolTodo: string;
+  toolTodoPhase: string;
+  toolTodoPhaseName: string;
+  toolTodoCount: string;
+  toolTodoTask: string;
+  toolTodoBox: string;
   toolResult: string;
   toolResultError: string;
   toolResultName: string;

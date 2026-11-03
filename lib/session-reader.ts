@@ -24,7 +24,7 @@ import type {
   SessionInfo,
 } from "./types";
 import { normalizeToolCalls } from "./normalize";
-import { isRecord } from "./type-guards";
+import { asString, isRecord } from "./type-guards";
 import { toolResultContentAsUrls } from "./media-cache";
 import { taskResultRetryFailure, taskResultStructuredOutput, taskResultUsageCost } from "./task-result-details";
 import type { TodoPhase } from "./pi-types";
@@ -957,9 +957,10 @@ function withNormalizedTimestamp(message: AgentMessage): AgentMessage {
 /**
  * toolResult `details` is provider/tool-internal metadata that dominates real
  * history payloads (measured 643KB of a 1.34MB context on a 533-entry session),
- * and the history UI reads exactly two keys from it: details.patch and
- * details.diff (components/MessageView.tsx getResultDiff). Serialization
- * allowlists those keys — extend the allowlist if MessageView ever reads more.
+ * and the history UI reads `patch`/`diff`, the edited file's `path`, the header
+ * scalars below, the todo phases behind the todo block, and the per-subagent
+ * summary. Serialization allowlists exactly those — extend the allowlist when
+ * the UI reads another key.
  * Task toolResults additionally keep a SIZE-BOUNDED subset of their
  * results/progress (telemetry, no full output) so the message flow can render
  * a per-subagent summary. On-disk parsing (loadSessionFile/getSessionEntries)
@@ -967,6 +968,12 @@ function withNormalizedTimestamp(message: AgentMessage): AgentMessage {
  */
 const TASK_DETAIL_MAX_TEXT = 240;
 const TASK_DETAIL_MAX_ROWS = 50;
+
+/** Scalars a tool block prints in its header; too small to bloat history. */
+const DETAIL_NUMBER_KEYS = ["exitCode", "wallTimeMs", "totalLines"] as const;
+
+const TODO_PHASE_MAX_ROWS = 20;
+const TODO_TASK_MAX_ROWS = 50;
 
 function truncateTaskDetailText(value: string): string {
   if (value.length <= TASK_DETAIL_MAX_TEXT) return value;
@@ -1104,6 +1111,31 @@ function hubDetailTargets(value: unknown): string[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+/**
+ * The todo block renders this tree, so the phases survive the strip — bounded
+ * per phase and per task the same way the task rows are.
+ */
+function keepTodoPhases(
+  value: unknown,
+): Array<{ name: string; tasks: Array<{ content: string; status: string }> }> | null {
+  if (!Array.isArray(value)) return null;
+  const phases: Array<{ name: string; tasks: Array<{ content: string; status: string }> }> = [];
+  for (const rawPhase of value.slice(0, TODO_PHASE_MAX_ROWS)) {
+    if (!isRecord(rawPhase)) continue;
+    const tasks: Array<{ content: string; status: string }> = [];
+    const rawTasks = Array.isArray(rawPhase.tasks) ? rawPhase.tasks : [];
+    for (const rawTask of rawTasks.slice(0, TODO_TASK_MAX_ROWS)) {
+      if (!isRecord(rawTask)) continue;
+      const content = asString(rawTask.content);
+      const status = asString(rawTask.status);
+      if (content === undefined || status === undefined) continue;
+      tasks.push({ content: truncateTaskDetailText(content), status });
+    }
+    phases.push({ name: truncateTaskDetailText(asString(rawPhase.name) ?? ""), tasks });
+  }
+  return phases.length > 0 ? phases : null;
+}
+
 function stripToolResultDetails(message: AgentMessage): AgentMessage {
   if (message.role !== "toolResult" || message.details === undefined) return message;
   const { details, ...rest } = message;
@@ -1111,6 +1143,15 @@ function stripToolResultDetails(message: AgentMessage): AgentMessage {
     const kept: Record<string, unknown> = {};
     if (typeof details.patch === "string") kept.patch = details.patch;
     if (typeof details.diff === "string") kept.diff = details.diff;
+    if (typeof details.path === "string" && details.path !== "") kept.path = details.path;
+    for (const key of DETAIL_NUMBER_KEYS) {
+      const value = details[key];
+      if (typeof value === "number" && Number.isFinite(value)) kept[key] = value;
+    }
+    if (message.toolName === "todo") {
+      const phases = keepTodoPhases(details.phases);
+      if (phases !== null) kept.phases = phases;
+    }
     if (message.toolName === "task") {
       const taskDetails = keepTaskToolResultDetails(details);
       if (taskDetails) Object.assign(kept, taskDetails);

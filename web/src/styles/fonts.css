@@ -1,0 +1,28 @@
+/*
+ * Nerd Font symbols, vendored as a fallback-only family: `--font-ui` and
+ * `--font-mono` list it after their real typefaces, so it only draws the icon
+ * codepoints omp puts into titles and messages. The `unicode-range` keeps it
+ * off the first paint — a face is fetched when a rendered character falls in
+ * its range, so a view without icons never downloads it.
+ *
+ * Provenance, licence and the subset command: `../assets/fonts/README.md`.
+ */
+@font-face {
+  font-family: "Nerd Symbols";
+  src: url("../assets/fonts/nerd-symbols-plane15.woff2") format("woff2");
+  font-style: normal;
+  font-weight: normal;
+  font-display: swap;
+  /* Nerd Fonts v3 icon plane — what omp emits today. */
+  unicode-range: U+F0000-FFFFD;
+}
+
+@font-face {
+  font-family: "Nerd Symbols";
+  src: url("../assets/fonts/nerd-symbols-bmp.woff2") format("woff2");
+  font-style: normal;
+  font-weight: normal;
+  font-display: swap;
+  /* Legacy BMP aliases, kept so older icon codepoints do not fall back to tofu. */
+  unicode-range: U+E000-F8FF;
+}

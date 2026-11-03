@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./app/App";
 import { EventStreamProvider } from "./state/event-stream";
+import "./styles/fonts.css";
 import "./styles/tokens.css";
 
 const queryClient = new QueryClient({

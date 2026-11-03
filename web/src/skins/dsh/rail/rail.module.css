@@ -399,14 +399,16 @@
 }
 
 /* Mirrors --font-ui but puts the color emoji families before the generic
-   sans-serif, so a title keeps its emoji on Windows, macOS, and Linux. */
+   sans-serif, so a title keeps its emoji on Windows, macOS, and Linux. The
+   `Nerd Symbols` fallback draws the Private Use Area icons omp prefixes a
+   title with; without it they paint as tofu boxes carrying the codepoint. */
 .sessionName {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Segoe UI Emoji", "Apple Color Emoji",
-    "Noto Color Emoji", sans-serif;
+    "Noto Color Emoji", "Nerd Symbols", sans-serif;
   font-size: var(--text-base);
   line-height: 1.35;
   text-overflow: ellipsis;
