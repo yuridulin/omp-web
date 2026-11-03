@@ -5,6 +5,7 @@ import {
   imageSrc,
   joinClassNames,
   messagePreview,
+  partialJsonStrings,
   prettyJson,
   roleLabel,
   stripSystemReminders,
@@ -65,6 +66,40 @@ describe("contentBlocks", () => {
     expect(contentBlocks("<system-reminder>\nonly a note\n</system-reminder>")).toEqual([
       { type: "text", text: "" },
     ]);
+  });
+
+  it("reads omp's arguments object and the partially written label", () => {
+    expect(contentBlocks({ type: "toolCall", id: "t1", name: "bash", arguments: { command: "ls" } })).toEqual([
+      { type: "toolCall", toolCallId: "t1", toolName: "bash", input: { command: "ls" } },
+    ]);
+    expect(
+      contentBlocks({
+        type: "toolCall",
+        id: "t2",
+        name: "bash",
+        arguments: {},
+        partialArgs: '{"command": "sleep 12; echo probe2", "i": "Running the pro',
+      }),
+    ).toEqual([
+      {
+        type: "toolCall",
+        toolCallId: "t2",
+        toolName: "bash",
+        input: { command: "sleep 12; echo probe2", i: "Running the pro" },
+      },
+    ]);
+  });
+
+  it("lets the finished arguments win over the streamed prefix", () => {
+    expect(
+      contentBlocks({
+        type: "toolCall",
+        toolCallId: "t3",
+        toolName: "read",
+        arguments: { path: "a.ts" },
+        partialArgs: '{"path": "a.t',
+      }),
+    ).toEqual([{ type: "toolCall", toolCallId: "t3", toolName: "read", input: { path: "a.ts" } }]);
   });
 
   it("defaults malformed tool calls instead of throwing", () => {
@@ -179,6 +214,33 @@ describe("roleLabel", () => {
   it("falls back to the raw role or 'message'", () => {
     expect(roleLabel("narrator")).toBe("narrator");
     expect(roleLabel("   ")).toBe("message");
+  });
+});
+
+describe("partialJsonStrings", () => {
+  it("reads completed fields and the unfinished string being written", () => {
+    expect(partialJsonStrings('{"command": "sleep 12; echo probe2", "i": "Running the pro')).toEqual({
+      command: "sleep 12; echo probe2",
+      i: "Running the pro",
+    });
+    expect(partialJsonStrings('{"command": "sleep 12"')).toEqual({ command: "sleep 12" });
+    expect(partialJsonStrings('{ "path" : "a.ts" , "limit" : 20 }')).toEqual({ path: "a.ts" });
+  });
+
+  it("decodes escapes and stops before an incomplete one", () => {
+    expect(partialJsonStrings('{"i": "quote \\" and \\\\ slash"}')).toEqual({
+      i: 'quote " and \\ slash',
+    });
+    expect(partialJsonStrings('{"i": "line\\nbreak"}')).toEqual({ i: "line\nbreak" });
+    expect(partialJsonStrings('{"i": "tail\\')).toEqual({ i: "tail" });
+    expect(partialJsonStrings('{"i": "tail\\u12')).toEqual({ i: "tail" });
+  });
+
+  it("ignores non-string values and malformed input", () => {
+    expect(partialJsonStrings('{"input": {"path": "nested"}, "i": "Read"}')).toEqual({ i: "Read" });
+    expect(partialJsonStrings("")).toEqual({});
+    expect(partialJsonStrings("not json")).toEqual({});
+    expect(partialJsonStrings('{"command": "unterminated')).toEqual({ command: "unterminated" });
   });
 });
 

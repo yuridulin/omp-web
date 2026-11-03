@@ -41,6 +41,112 @@ export interface ToolCallBlock {
 
 export type ContentBlock = TextBlock | ImageBlock | ThinkingContentBlock | ToolCallBlock;
 
+const JSON_ESCAPES: Record<string, string> = {
+  '"': '"',
+  "\\": "\\",
+  "/": "/",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+};
+
+interface JsonStringRead {
+  value: string;
+  end: number;
+  /** False when the stream stopped before the closing quote. */
+  complete: boolean;
+}
+
+/** Read a JSON string starting at `start`; an unfinished value keeps its prefix. */
+function readJsonString(raw: string, start: number): JsonStringRead | null {
+  if (raw[start] !== '"') return null;
+  let value = "";
+  let index = start + 1;
+  while (index < raw.length) {
+    const char = raw[index]!;
+    if (char === '"') return { value, end: index + 1, complete: true };
+    if (char !== "\\") {
+      value += char;
+      index += 1;
+      continue;
+    }
+    const escape = raw[index + 1];
+    if (escape === undefined) return { value, end: index + 1, complete: false };
+    if (escape === "u") {
+      const hex = raw.slice(index + 2, index + 6);
+      if (!/^[0-9a-f]{4}$/i.test(hex)) return { value, end: index + 2, complete: false };
+      value += String.fromCharCode(parseInt(hex, 16));
+      index += 6;
+      continue;
+    }
+    const decoded = JSON_ESCAPES[escape];
+    if (decoded === undefined) return { value, end: index + 1, complete: false };
+    value += decoded;
+    index += 2;
+  }
+  return { value, end: raw.length, complete: false };
+}
+
+/**
+ * String fields of an object that is still being written.
+ *
+ * omp streams a tool call as `{arguments: {}, partialArgs: "{\"command\":..."}`
+ * and only fills `arguments` when the block ends, so the call would show no
+ * label (its intent, command, or path) while the model writes it. Truncated
+ * input yields the fields completed so far; malformed input yields {}.
+ */
+export function partialJsonStrings(raw: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  const open = raw.indexOf("{");
+  if (open < 0) return values;
+  let index = open + 1;
+  for (;;) {
+    while (index < raw.length && /[\s,]/.test(raw[index]!)) index += 1;
+    if (index >= raw.length || raw[index] === "}") return values;
+    const key = readJsonString(raw, index);
+    if (!key || !key.complete) return values;
+    index = key.end;
+    while (index < raw.length && /\s/.test(raw[index]!)) index += 1;
+    if (raw[index] !== ":") return values;
+    index += 1;
+    while (index < raw.length && /\s/.test(raw[index]!)) index += 1;
+    if (raw[index] === '"') {
+      const value = readJsonString(raw, index);
+      if (!value) return values;
+      values[key.value] = value.value;
+      if (!value.complete) return values;
+      index = value.end;
+      continue;
+    }
+    // Only strings become labels; skip any other value up to the next member.
+    let depth = 0;
+    let inString = false;
+    while (index < raw.length) {
+      const char = raw[index]!;
+      if (inString) {
+        if (char === "\\") {
+          index += 2;
+          continue;
+        }
+        if (char === '"') inString = false;
+      } else if (char === '"') {
+        inString = true;
+      } else if (char === "{" || char === "[") {
+        depth += 1;
+      } else if (char === "}" || char === "]") {
+        if (depth === 0) return values;
+        depth -= 1;
+      } else if (char === "," && depth === 0) {
+        break;
+      }
+      index += 1;
+    }
+    if (index >= raw.length) return values;
+  }
+}
+
 function safeImageUrl(input: string): string | null {
   const value = input.trim();
   if (value === "") return null;
@@ -149,7 +255,13 @@ function parseBlock(value: unknown): ContentBlock | null {
         deferred: value.deferred === true,
       };
     case "toolCall":
-    case "tool_call":
+    case "tool_call": {
+      const input = isRecord(value.input)
+        ? value.input
+        : isRecord(value.arguments)
+          ? value.arguments
+          : {};
+      const partial = typeof value.partialArgs === "string" ? partialJsonStrings(value.partialArgs) : {};
       return {
         type: "toolCall",
         toolCallId:
@@ -164,8 +276,9 @@ function parseBlock(value: unknown): ContentBlock | null {
             : typeof value.name === "string"
               ? value.name
               : "tool",
-        input: isRecord(value.input) ? value.input : {},
+        input: { ...partial, ...input },
       };
+    }
     default:
       // Unknown block types fall back to their textual payload, if any.
       if (typeof value.text === "string") return parseText(value.text);

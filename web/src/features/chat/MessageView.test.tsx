@@ -190,6 +190,27 @@ describe("MessageView tool calls", () => {
     expect(screen.getByText("running…")).toBeTruthy();
   });
 
+  it("labels a tool call while its arguments are still streaming", () => {
+    render(
+      <TranscriptRow
+        streaming
+        message={assistant([
+          {
+            type: "toolCall",
+            toolCallId: "call-partial",
+            toolName: "bash",
+            arguments: {},
+            partialArgs: '{"command": "sleep 12; echo probe2", "i": "Running the pro',
+          },
+        ])}
+      />,
+    );
+
+    expect(screen.getByText("bash")).toBeTruthy();
+    expect(screen.getByText("Running the pro")).toBeTruthy();
+    expect(screen.getByText("running…")).toBeTruthy();
+  });
+
   it("keeps a settled tool call collapsed", () => {
     const toolResults = new Map<string, ChatMessage>([
       [
