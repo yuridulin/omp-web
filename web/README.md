@@ -99,9 +99,10 @@ the UI never imports `core/`, `lib/` or `server/`.
 ## New session & composer
 
 - A project header's `+` button opens the normal empty chat seeded with that
-  project root; `N` opens it from the current session or the default
-  workspace. There is no separate pane and no workspace form: the first send
-  creates the session and continues in the same chat.
+  project root; `N` opens it from the current session, otherwise from the first
+  rail project, falling back to `~/omp-cwd-<YYYYMMDD>` when no project exists.
+  There is no separate pane and no workspace form: the first send creates the
+  session and continues in the same chat.
 - While that chat has no session yet it is listed as a `New session` row in
   its project group, marked active, with no archive action. The workbench
   stays open on the draft workspace, keyed per workspace, so the layout and

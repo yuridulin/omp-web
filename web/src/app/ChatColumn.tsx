@@ -10,6 +10,7 @@ import {
   type ModelEntry,
 } from "@/api/agent";
 import type { DragPayload } from "@/drag/payload";
+import { useProjects } from "@/features/projects/use-projects";
 import { useModels } from "@/features/sessions/use-models";
 import { useSessionModel } from "@/features/sessions/use-session-model";
 import { skinFor } from "@/skins/registry";
@@ -108,6 +109,7 @@ export function ChatColumn({
   const [draftModel, setDraftModel] = useState<{ provider: string; modelId: string } | null>(null);
   const [draftThinking, setDraftThinking] = useState("auto");
   const draftEpoch = useRef(newSessionEpoch);
+  const projectsQuery = useProjects();
   const modelsQuery = useModels();
   const models = modelsQuery.data;
   const modelFallback = useMemo(() => {
@@ -154,21 +156,19 @@ export function ChatColumn({
     };
   }, [isDraft, draftCwd]);
 
-  const resolveDraftCwd = useCallback(async () => {
-    setDraftCwdError(null);
-    try {
-      const path = await fetchDefaultCwd();
-      setDraftCwd(path);
-      onDraftCwdChange(path);
-    } catch (cause) {
-      setDraftCwdError(errorMessage(cause));
-    }
-  }, [onDraftCwdChange]);
-
   const applyDraftCwd = useCallback((cwd: string) => {
     setDraftCwd(cwd);
     onDraftCwdChange(cwd);
   }, [onDraftCwdChange]);
+
+  // A draft starts in the first project the rail lists, so a new session is
+  // never created in the synthetic home directory while real projects exist.
+  const resolveDraftCwd = useCallback(async (): Promise<string> => {
+    setDraftCwdError(null);
+    const path = projectsQuery.data?.[0]?.path ?? await fetchDefaultCwd();
+    applyDraftCwd(path);
+    return path;
+  }, [projectsQuery.data, applyDraftCwd]);
 
   // The rail and workbench paint the draft from the shell, so keep the shell's
   // copy in step with the cwd this column resolved or validated. Declared before
@@ -187,9 +187,9 @@ export function ChatColumn({
   }, [newSessionEpoch, newSessionCwd, applyDraftCwd]);
 
   useEffect(() => {
-    if (selected !== null || draftCwd.trim() !== "") return;
-    void resolveDraftCwd();
-  }, [selected, draftCwd, resolveDraftCwd]);
+    if (selected !== null || draftCwd.trim() !== "" || projectsQuery.isPending) return;
+    resolveDraftCwd().catch((cause: unknown) => setDraftCwdError(errorMessage(cause)));
+  }, [selected, draftCwd, projectsQuery.isPending, resolveDraftCwd]);
 
   useEffect(() => {
     setExtensionError(null);
@@ -226,8 +226,7 @@ export function ChatColumn({
       if (selected === null) {
         let target = draftCwd.trim();
         if (target === "") {
-          target = await fetchDefaultCwd();
-          applyDraftCwd(target);
+          target = await resolveDraftCwd();
         }
         const validated = await validateCwd(target);
         applyDraftCwd(validated.cwd);
