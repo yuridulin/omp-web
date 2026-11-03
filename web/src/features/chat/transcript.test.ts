@@ -7,9 +7,25 @@ import {
   messagePreview,
   prettyJson,
   roleLabel,
+  stripSystemReminders,
   toolResultImages,
   toolResultText,
 } from "./transcript";
+
+describe("stripSystemReminders", () => {
+  it("removes matched reminder blocks and keeps the prompt text", () => {
+    expect(stripSystemReminders("question <system-reminder>state</system-reminder>")).toBe("question");
+    expect(
+      stripSystemReminders(
+        "before\n<system-reminder>one</system-reminder>\n<system-reminder>two</system-reminder>\nafter",
+      ),
+    ).toBe("before\n\nafter");
+  });
+
+  it("leaves an unmatched tag alone instead of eating the message", () => {
+    expect(stripSystemReminders("keep <system-reminder> this")).toBe("keep <system-reminder> this");
+  });
+});
 
 describe("contentBlocks", () => {
   it("wraps a plain string as a single text block", () => {
@@ -36,6 +52,18 @@ describe("contentBlocks", () => {
       { type: "toolCall", toolCallId: "t1", toolName: "read", input: { path: "a.ts" } },
       { type: "image", url: "https://example.com/a.png" },
       { type: "text", text: "fallback text" },
+    ]);
+  });
+
+  it("drops harness reminders wherever they are embedded", () => {
+    expect(
+      contentBlocks([
+        { type: "text", text: "question\n<system-reminder>runtime state</system-reminder>" },
+        { type: "text", text: "<system-reminder>today</system-reminder>" },
+      ]),
+    ).toEqual([{ type: "text", text: "question" }, { type: "text", text: "" }]);
+    expect(contentBlocks("<system-reminder>\nonly a note\n</system-reminder>")).toEqual([
+      { type: "text", text: "" },
     ]);
   });
 

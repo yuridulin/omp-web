@@ -3,6 +3,7 @@ import type { ChatMessage } from "@/api/session-types";
 import {
   EAGER_TAIL,
   eagerTailStart,
+  isHiddenMessage,
   isPairedToolResult,
   pairToolResults,
   toolCallIds,
@@ -76,6 +77,42 @@ describe("transcriptRows", () => {
     const rows = transcriptRows(messages, new Set(["a"]));
     expect(rows.map((row) => row.index)).toEqual([0, 1, 3]);
     expect(rows.at(-1)?.message.toolCallId).toBe("orphan");
+  });
+
+  it("hides server messages marked display:false", () => {
+    expect(isHiddenMessage({ role: "custom", content: "hidden note", display: false })).toBe(true);
+    expect(isHiddenMessage({ role: "custom", content: "shown note", display: true })).toBe(false);
+  });
+
+  it("hides a row that carried only a system reminder", () => {
+    const reminder = {
+      role: "custom",
+      customType: "eval-state-context",
+      content: "<system-reminder>\nruntime state\n</system-reminder>",
+    };
+    expect(isHiddenMessage(reminder)).toBe(true);
+
+    const messages: ChatMessage[] = [reminder, { role: "user", content: "hi" }];
+    expect(transcriptRows(messages, new Set()).map((row) => row.index)).toEqual([1]);
+  });
+
+  it("keeps a prompt that carried a reminder next to real content", () => {
+    expect(
+      isHiddenMessage({
+        role: "user",
+        content: [{ type: "text", text: "question <system-reminder>date</system-reminder>" }],
+      }),
+    ).toBe(false);
+    expect(
+      isHiddenMessage({
+        role: "user",
+        content: [{ type: "text", text: "<system-reminder>date</system-reminder>" }, { type: "image", url: "/a.png" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps assistant rows even when they have no body to paint", () => {
+    expect(isHiddenMessage({ role: "assistant", content: [] })).toBe(false);
   });
 });
 

@@ -112,13 +112,34 @@ function parseImage(record: Record<string, unknown>): ImageBlock {
   return block;
 }
 
+/**
+ * omp appends harness notes to a prompt as `<system-reminder>` XML (environment
+ * state, date, todo nudges). They are system-authored bookkeeping, not chat
+ * content, so they never reach the transcript even when a session file stores
+ * them inside a user message.
+ */
+const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
+
+export function stripSystemReminders(text: string): string {
+  if (!text.includes("<system-reminder")) return text;
+  return text
+    .replace(SYSTEM_REMINDER_RE, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseText(text: string): TextBlock {
+  return { type: "text", text: stripSystemReminders(text) };
+}
+
 function parseBlock(value: unknown): ContentBlock | null {
-  if (typeof value === "string") return { type: "text", text: value };
+  if (typeof value === "string") return parseText(value);
   if (!isRecord(value)) return null;
 
   switch (value.type) {
     case "text":
-      return { type: "text", text: typeof value.text === "string" ? value.text : "" };
+      return parseText(typeof value.text === "string" ? value.text : "");
     case "image":
       return parseImage(value);
     case "thinking":
@@ -147,7 +168,7 @@ function parseBlock(value: unknown): ContentBlock | null {
       };
     default:
       // Unknown block types fall back to their textual payload, if any.
-      if (typeof value.text === "string") return { type: "text", text: value.text };
+      if (typeof value.text === "string") return parseText(value.text);
       return null;
   }
 }

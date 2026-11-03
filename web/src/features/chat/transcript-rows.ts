@@ -92,6 +92,23 @@ export interface TranscriptRow {
   message: ChatMessage;
 }
 
+/** Rows that carry harness bookkeeping rather than conversation. */
+const HIDEABLE_ROLES: Record<string, true> = { user: true, custom: true, system: true };
+
+/**
+ * `display: false` marks a server message as non-conversational. A note that
+ * carried only `<system-reminder>` text is likewise empty once the reminder is
+ * stripped from its blocks, and must not paint a role label with no body.
+ */
+export function isHiddenMessage(message: ChatMessage): boolean {
+  if (message.display === false) return true;
+  if (HIDEABLE_ROLES[message.role] !== true) return false;
+  if (Array.isArray(message.files) && message.files.length > 0) return false;
+  const blocks = contentBlocks(message.content);
+  if (blocks.some((block) => block.type === "image")) return false;
+  return blocks.every((block) => block.type === "text" && block.text.trim() === "");
+}
+
 /** Rows to paint, in transcript order. */
 export function transcriptRows(
   messages: readonly ChatMessage[],
@@ -99,6 +116,7 @@ export function transcriptRows(
 ): TranscriptRow[] {
   const rows: TranscriptRow[] = [];
   messages.forEach((message, index) => {
+    if (isHiddenMessage(message)) return;
     if (isPairedToolResult(message, ids)) return;
     rows.push({ index, message });
   });
