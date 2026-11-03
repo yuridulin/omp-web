@@ -21,6 +21,7 @@ export function RailSkin({
   projects,
   selected,
   running,
+  unseen,
   loading,
   error,
   archivedView,
@@ -75,6 +76,8 @@ export function RailSkin({
 
   const renderSession = (item: RailSessionItem) => {
     const active = item.id === selected;
+    const unread = !item.running && unseen.has(item.id);
+    const status = item.running ? "running" : unread ? "unread" : undefined;
     return (
       <div key={item.id} className={styles.sessionRow}>
         <button
@@ -84,11 +87,11 @@ export function RailSkin({
           title={item.time ? `${item.cwd} · ${item.time}` : item.cwd}
           aria-current={active ? "page" : undefined}
         >
-          <span className={styles.dotSlot} aria-hidden="true">
-            {item.running ? <span className={styles.dotRunning} /> : null}
+          <span className={styles.dotSlot} aria-hidden="true" data-status={status}>
+            {item.running ? <span className={styles.spinner} /> : null}
+            {unread ? <span className={styles.dotUnread} /> : null}
           </span>
           <span className={styles.sessionName}>{item.label}</span>
-          {item.projectLabel ? <span className={styles.sessionProject}>{item.projectLabel}</span> : null}
           <span className={styles.sessionMeta}>{item.time}</span>
         </button>
         <button
@@ -105,7 +108,7 @@ export function RailSkin({
     );
   };
 
-  const empty = !loading && !error && view.active.length === 0 && view.groups.length === 0;
+  const empty = !loading && !error && view.groups.length === 0;
 
   return (
     <aside className={styles.rail}>
@@ -228,17 +231,7 @@ export function RailSkin({
           </section>
         ) : null}
 
-        {!archivedView && view.active.length > 0 ? (
-          <section className={styles.section}>
-            <div className={styles.sectionLabelRow}>
-              <span className={styles.sectionLabel}>Active</span>
-              <span className={styles.sectionCount}>{view.active.length}</span>
-            </div>
-            {view.active.map(renderSession)}
-          </section>
-        ) : null}
-
-        {archivedView ? null : view.groups.map((group) => {
+        {!archivedView && view.groups.map((group) => {
           const isCollapsed = collapsed.has(group.key);
           return (
             <section key={group.key} className={styles.section}>

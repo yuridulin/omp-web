@@ -27,6 +27,7 @@ function renderRail(overrides: Partial<Parameters<typeof RailSkin>[0]> = {}) {
     projects,
     selected: null,
     running: new Set(),
+    unseen: new Set(),
     loading: false,
     error: null,
     archivedView: false,
@@ -65,6 +66,42 @@ describe("rail new session entry point", () => {
 
     expect(onToggleWorkspacePicker).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Search sessions" })).toBeTruthy();
+  });
+});
+
+describe("session status indicators", () => {
+  const statusIn = (container: HTMLElement): string | null =>
+    container.querySelector("[data-status]")?.getAttribute("data-status") ?? null;
+
+  it("keeps running sessions in their project group instead of an Active section", () => {
+    renderRail({ sessions: [session], running: new Set(["session-one"]) });
+
+    expect(screen.queryByText("Active")).toBeNull();
+    expect(screen.getByText("Games")).toBeTruthy();
+    expect(screen.getByText("First session")).toBeTruthy();
+    expect(statusIn(document.body)).toBe("running");
+  });
+
+  it("shows a blue dot for a finished chat that has not been opened", () => {
+    renderRail({ sessions: [session], unseen: new Set(["session-one"]) });
+
+    expect(statusIn(document.body)).toBe("unread");
+  });
+
+  it("shows no status once the chat is open or read", () => {
+    renderRail({ sessions: [session], unseen: new Set() });
+
+    expect(statusIn(document.body)).toBeNull();
+  });
+
+  it("lets the spinner win over an unread dot", () => {
+    renderRail({
+      sessions: [session],
+      running: new Set(["session-one"]),
+      unseen: new Set(["session-one"]),
+    });
+
+    expect(statusIn(document.body)).toBe("running");
   });
 });
 

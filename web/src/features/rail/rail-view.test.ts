@@ -114,7 +114,6 @@ describe("buildRailView", () => {
       now: NOW,
     });
 
-    expect(view.active).toEqual([]);
     expect(view.groups).toHaveLength(1);
     expect(view.groups[0]?.label).toBe("Alpha workspace");
     expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["new", "old"]);
@@ -202,7 +201,7 @@ describe("buildRailView", () => {
     expect(byLabel.groups[0]?.sessions).toEqual([]);
   });
 
-  it("lists running sessions once, newest first, with their project as secondary text", () => {
+  it("keeps running sessions inside their project group, newest first", () => {
     const view = buildRailView({
       projects: [
         project("/work/alpha", { alias: "Alpha" }),
@@ -217,15 +216,13 @@ describe("buildRailView", () => {
       now: NOW,
     });
 
-    expect(view.active.map((item) => item.id)).toEqual(["beta-run", "alpha-run"]);
-    expect(view.active.map((item) => item.projectLabel)).toEqual(["Beta", "Alpha"]);
-    expect(view.active.every((item) => item.running)).toBe(true);
-    expect(view.active.every((item) => item.time !== "")).toBe(true);
-
     const alpha = view.groups.find((group) => group.label === "Alpha");
-    expect(alpha?.sessions.map((item) => item.id)).toEqual(["alpha-idle"]);
+    expect(alpha?.sessions.map((item) => item.id)).toEqual(["alpha-idle", "alpha-run"]);
+    expect(alpha?.sessions.map((item) => item.running)).toEqual([false, true]);
     const beta = view.groups.find((group) => group.label === "Beta");
-    expect(beta?.sessions).toEqual([]);
+    expect(beta?.sessions.map((item) => item.id)).toEqual(["beta-run"]);
+    expect(beta?.sessions[0]?.running).toBe(true);
+    expect(view.groups.flatMap((group) => group.sessions).filter((item) => item.running)).toHaveLength(2);
   });
 
   it("keeps only running sessions when the running filter is on", () => {
@@ -244,12 +241,11 @@ describe("buildRailView", () => {
       now: NOW,
     });
 
-    expect(view.active.map((item) => item.id)).toEqual(["alpha-run"]);
-    // Running sessions already appear in Active, so no project section survives.
-    expect(view.groups).toEqual([]);
+    expect(view.groups.map((group) => group.label)).toEqual(["Alpha"]);
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["alpha-run"]);
   });
 
-  it("applies search to the running section too", () => {
+  it("applies search to running sessions in their groups", () => {
     const view = buildRailView({
       projects: [project("/work/alpha", { alias: "Alpha" })],
       sessions: [
@@ -261,7 +257,8 @@ describe("buildRailView", () => {
       now: NOW,
     });
 
-    expect(view.active.map((item) => item.id)).toEqual(["match"]);
-    expect(view.groups).toEqual([]);
+    expect(view.groups).toHaveLength(1);
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["match"]);
+    expect(view.groups[0]?.sessions[0]?.running).toBe(true);
   });
 });

@@ -14,8 +14,6 @@ export interface RailSessionItem {
   /** Relative timestamp, e.g. `now`, `12m`, `3h`, `2d`. */
   time: string;
   running: boolean;
-  /** Set for the Active section, where the project is the secondary text. */
-  projectLabel?: string;
 }
 
 export interface RailProjectGroup {
@@ -36,8 +34,6 @@ export interface RailViewInput {
 }
 
 export interface RailView {
-  /** Running sessions, newest first, with their project as secondary text. */
-  active: RailSessionItem[];
   /** Project sections in pin/sort/label order; sessions newest first. */
   groups: RailProjectGroup[];
 }
@@ -125,23 +121,19 @@ function toItem(
   session: SessionSummary,
   now: number,
   running: ReadonlySet<string>,
-  projectLabel?: string,
 ): RailSessionItem {
-  const item: RailSessionItem = {
+  return {
     id: session.id,
     label: sessionLabel(session),
     cwd: session.cwd,
     time: relativeTimeLabel(session.lastMessageAt ?? session.modified, now),
     running: running.has(session.id),
   };
-  if (projectLabel) item.projectLabel = projectLabel;
-  return item;
 }
 
 /**
- * Builds everything a rail renders. Sessions in the Active section are removed
- * from project groups so a running session appears exactly once; a group also
- * matches the query by its own label or path.
+ * Builds everything a rail renders. Every session lives in its project group,
+ * running or not; a group also matches the query by its own label or path.
  */
 export function buildRailView(input: RailViewInput): RailView {
   const now = input.now ?? Date.now();
@@ -180,24 +172,11 @@ export function buildRailView(input: RailViewInput): RailView {
   }
 
   const ordered = [...drafts.values()].sort(compareGroups);
-  const projectLabels = new Map<string, string>();
-  for (const group of ordered) {
-    group.sessions.sort(compareSessions);
-    for (const session of group.sessions) projectLabels.set(session.id, group.label);
-  }
-
-  const activeSessions = input.sessions
-    .filter((session) => input.running.has(session.id) && matchesSession(session, needle))
-    .sort(compareSessions);
-  const activeIds = new Set(activeSessions.map((session) => session.id));
-  const active = activeSessions.map((session) =>
-    toItem(session, now, input.running, projectLabels.get(session.id)),
-  );
+  for (const group of ordered) group.sessions.sort(compareSessions);
 
   const groups: RailProjectGroup[] = [];
   for (const group of ordered) {
     const sessions = group.sessions
-      .filter((session) => !activeIds.has(session.id))
       .filter((session) => matchesSession(session, needle))
       .filter((session) => !runningOnly || input.running.has(session.id))
       .map((session) => toItem(session, now, input.running));
@@ -216,5 +195,5 @@ export function buildRailView(input: RailViewInput): RailView {
     });
   }
 
-  return { active, groups };
+  return { groups };
 }

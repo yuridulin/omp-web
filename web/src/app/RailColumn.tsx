@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { archiveSession } from "@/api/agent";
 import { comparablePath } from "@/api/paths";
+import type { SessionSummary } from "@/api/workspace";
 import { pickBrowserFolder } from "@/features/rail/pick-workspace-folder";
 import { archiveProject, registerProject } from "@/api/workspace";
 import { useProjects } from "@/features/projects/use-projects";
 import { useArchivedSessions } from "@/features/sessions/use-archived-sessions";
 import { useSessions } from "@/features/sessions/use-sessions";
+import { useUnseenSessions } from "@/features/sessions/use-unseen-sessions";
 import { getLayout, updateLayout } from "@/layout/layout-store";
 import { ResizeHandle } from "@/layout/ResizeHandle";
 import { useLayoutField } from "@/layout/use-layout";
@@ -17,6 +19,7 @@ import { useRunningSessions } from "@/state/event-stream";
 import styles from "./app.module.css";
 
 const EMPTY_RUNNING: string[] = [];
+const EMPTY_SESSIONS: readonly SessionSummary[] = [];
 
 interface RailColumnProps {
   selected: string | null;
@@ -48,6 +51,7 @@ export function RailColumn({
   const adding = useRef(false);
   const fallbackRunning = sessions.data?.runningSessionIds ?? EMPTY_RUNNING;
   const running = useRunningSessions(fallbackRunning);
+  const unseen = useUnseenSessions(sessions.data?.sessions ?? EMPTY_SESSIONS, running, selected);
   const RailSkin = skinFor("rail", appearance);
 
   const refreshAfterArchive = async (): Promise<void> => {
@@ -124,6 +128,7 @@ export function RailColumn({
           projects={projects.data ?? []}
           selected={selected}
           running={running}
+          unseen={unseen}
           loading={sessions.isLoading}
           error={actionError ?? addError ?? (sessions.isError ? sessions.error.message : null)}
           archivedView={archivedView}

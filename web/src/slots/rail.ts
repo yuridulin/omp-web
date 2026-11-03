@@ -6,6 +6,8 @@ export interface RailSlotProps {
   projects: ProjectSummary[];
   selected: string | null;
   running: ReadonlySet<string>;
+  /** Finished sessions with unseen messages; painted as a dot until opened. */
+  unseen: ReadonlySet<string>;
   loading: boolean;
   error: string | null;
   /** True while the rail shows archived sessions instead of the live list. */

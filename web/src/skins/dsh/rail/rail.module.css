@@ -399,16 +399,38 @@
 
 .dotSlot {
   display: inline-flex;
-  width: 5px;
-  height: 5px;
+  width: 10px;
+  height: 10px;
   align-items: center;
   justify-content: center;
-  flex: 0 0 5px;
+  flex: 0 0 10px;
 }
 
-.dotRunning {
-  width: 5px;
-  height: 5px;
+.spinner {
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-pill);
+  animation: rail-spin 0.8s linear infinite;
+}
+
+@keyframes rail-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.dotUnread {
+  width: 6px;
+  height: 6px;
   border-radius: var(--radius-pill);
   background: var(--accent);
 }
@@ -424,16 +446,6 @@
     "Noto Color Emoji", sans-serif;
   font-size: var(--text-base);
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sessionProject {
-  flex: 0 1 auto;
-  max-width: 46%;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
