@@ -4,11 +4,17 @@ import { errorEnvelope, routeContract } from "@/server/contract";
 import { exitedSessionSchema } from "@/server/schemas/agent";
 import { getExitedRpcSession, getRpcSession, WebRpcError } from "@/lib/rpc-manager";
 import { getSessionAuthority } from "@/lib/session-authority-registry";
+import { snapshotFrame } from "@/lib/session-authority";
 import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 
 export const contract = routeContract({
   GET: {
     summary: "Read a session's live omp state and the server authority's core snapshot",
+    request: {
+      // `snapshot=1` skips omp's heavy get_state (system prompt, tool schemas,
+      // transcript) for callers that only reconcile run state and revision.
+      query: z.object({ snapshot: z.enum(["1"]).optional() }),
+    },
     responses: {
       200: z.looseObject({
         running: z.boolean(),
@@ -24,7 +30,7 @@ export const contract = routeContract({
 });
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -34,6 +40,15 @@ export async function GET(
     // below would 404 a brand-new running session.
     const rpc = getRpcSession(id);
     if (rpc?.isAlive()) {
+      if (new URL(req.url).searchParams.get("snapshot") === "1") {
+        const authority = getSessionAuthority(id);
+        // History is re-read through the transcript window; the reconcile poll
+        // must not ship the whole file every few seconds.
+        return json({
+          running: true,
+          snapshot: authority ? snapshotFrame(authority.snapshot, false).snapshot : null,
+        });
+      }
       try {
         const state = await rpc.send({ type: "get_state" });
         const authority = getSessionAuthority(id);

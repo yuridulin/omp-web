@@ -1,5 +1,7 @@
 /** Shapes carried by the `session` SSE channel (`contract/events.md`). */
 
+import { isRecord } from "./guards";
+
 export interface ChatMessage {
   role: string;
   content: unknown;
@@ -53,4 +55,10 @@ export interface ConnectedFrame {
 export interface ChannelFrame {
   type: string;
   [key: string]: unknown;
+}
+
+/** A snapshot the client can merge: the run state is what reconciliation keys on. */
+export function isSessionSnapshot(value: unknown): value is SessionSnapshot {
+  if (!isRecord(value) || !isRecord(value.session) || !isRecord(value.session.run)) return false;
+  return value.session.run.status === "idle" || value.session.run.status === "running";
 }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { EventStreamClient, type Channel, type FrameHandler } from "@/api/events";
+import { fetchSessionSnapshot } from "@/api/agent";
 import { applyExtensionFrame } from "./extension-store";
 import { applyLspDiagnosticsFrame } from "./lsp-store";
 import { applySnapshotFrame, isSnapshotFrame } from "./session-store";
@@ -93,6 +94,7 @@ export function useRunningSessions(fallbackIds: readonly string[]): Set<string> 
 
 export function useSessionStream(sessionId: string | null, revision = 0): { error: string | null } {
   const [error, setError] = useState<string | null>(null);
+  useSessionReconcile(sessionId, revision);
   useEffect(() => setError(null), [sessionId, revision]);
   useChannel(
     sessionId ? { kind: "session", sessionId } : null,
@@ -105,6 +107,46 @@ export function useSessionStream(sessionId: string | null, revision = 0): { erro
     revision,
   );
   return { error };
+}
+
+/**
+ * Re-read the authority's snapshot when a chat opens and when the tab comes
+ * back into view. A live run keeps streaming through the SSE subscription; a
+ * stale one (a socket that died while the tab was away) gets the missed end
+ * here — the idle snapshot also carries the bumped history revision that makes
+ * the transcript re-read its tail.
+ */
+export function useSessionReconcile(sessionId: string | null, revision = 0): void {
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const refresh = (): void => {
+      void fetchSessionSnapshot(sessionId)
+        .then((snapshot) => {
+          if (cancelled || !snapshot) return;
+          applySnapshotFrame(sessionId, {
+            type: "snapshot",
+            revision: snapshot.session.historyRevision,
+            history: false,
+            snapshot,
+          });
+        })
+        .catch(() => {
+          // The SSE subscription still carries the next frame.
+        });
+    };
+    refresh();
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", refresh);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [sessionId, revision]);
 }
 
 export function useWorkspaceEvents(roots: readonly string[]): void {

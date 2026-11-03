@@ -2535,6 +2535,13 @@ paths:
           required: true
           schema:
             type: string
+        - name: snapshot
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "1"
       responses:
         "200":
           description: OK

@@ -5,6 +5,7 @@ import {
   dispatchIntent,
   fetchLiveSessionState,
   fetchModels,
+  fetchSessionSnapshot,
 } from "./agent";
 
 const apiMock = vi.hoisted(() => ({
@@ -146,6 +147,43 @@ describe("fetchLiveSessionState", () => {
       model: null,
       thinkingLevel: null,
     });
+  });
+});
+
+describe("fetchSessionSnapshot", () => {
+  it("returns the authority snapshot without its transcript", async () => {
+    apiMock.GET.mockResolvedValueOnce(
+      ok({
+        running: true,
+        snapshot: {
+          session: {
+            sessionId: "sess-1",
+            run: { status: "idle", error: null },
+            historyRevision: 7,
+            messages: [{ role: "user", content: "hi" }],
+            entryIds: ["e1"],
+          },
+          branching: null,
+          draft: { value: "", images: [], files: [] },
+        },
+      }),
+    );
+
+    const snapshot = await fetchSessionSnapshot("sess-1");
+
+    expect(snapshot?.session.run.status).toBe("idle");
+    expect(snapshot?.session.historyRevision).toBe(7);
+    expect(snapshot?.session).not.toHaveProperty("messages");
+    expect(snapshot?.session).not.toHaveProperty("entryIds");
+    expect(apiMock.GET).toHaveBeenCalledWith("/api/agent/sessions/{id}/state", {
+      params: { path: { id: "sess-1" }, query: { snapshot: "1" } },
+    });
+  });
+
+  it("returns null when the session has no live snapshot", async () => {
+    apiMock.GET.mockResolvedValueOnce(ok({ running: false }));
+
+    await expect(fetchSessionSnapshot("sess-1")).resolves.toBeNull();
   });
 });
 

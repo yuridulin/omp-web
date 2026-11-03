@@ -2203,7 +2203,9 @@ export interface paths {
         /** Read a session's live omp state and the server authority's core snapshot */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    snapshot?: "1";
+                };
                 header?: never;
                 path: {
                     id: string;

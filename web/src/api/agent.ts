@@ -1,6 +1,7 @@
 import { api } from "./client";
 import { isRecord } from "./guards";
 import type { paths } from "./schema";
+import { isSessionSnapshot, type SessionSnapshot } from "./session-types";
 
 export type ModelsPayload = NonNullable<
   paths["/api/system/models"]["get"]["responses"][200]["content"]["application/json"]
@@ -92,6 +93,20 @@ export async function fetchLiveSessionState(sessionId: string): Promise<LiveSess
     state && typeof state.thinkingLevel === "string" ? state.thinkingLevel : null;
 
   return { model, thinkingLevel };
+}
+
+export async function fetchSessionSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+  const { data, error, response } = await api.GET("/api/agent/sessions/{id}/state", {
+    params: { path: { id: sessionId }, query: { snapshot: "1" } },
+  });
+  if (error) throw new Error(errorInfo(error, response.status).message);
+
+  const snapshot = data && isRecord(data.snapshot) ? data.snapshot : null;
+  if (!isSessionSnapshot(snapshot)) return null;
+  // Defensive: a reconcile snapshot never carries the transcript, which is
+  // read through the history window.
+  const { messages: _messages, entryIds: _entryIds, ...session } = snapshot.session;
+  return { ...snapshot, session };
 }
 
 export async function createSession(input: NewSessionInput): Promise<string> {
