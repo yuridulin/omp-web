@@ -16,12 +16,15 @@ import {
   getWorkbenchContext,
   openDiffTab,
   openFileTab,
+  openSubagentTab,
   openTerminalTab,
   removeWorkbenchRoot,
   renameFileTabs,
   resetLayoutForTests,
   setActiveTab,
   setTabScroll,
+  setWorkbenchView,
+  subagentTabId,
   terminalTabId,
   updateLayout,
 } from "./layout-store";
@@ -273,5 +276,61 @@ describe("layout store", () => {
     expect(context.tabs.map((tab) => tab.path)).toEqual(["D:/repo/src/a.ts.bak"]);
     expect(context.activeTabId).toBe(fileTabId("D:/repo/src/a.ts.bak"));
     expect(closeTabsForPath("s1", "D:/repo/missing")).toEqual([]);
+  });
+});
+
+describe("agents surface", () => {
+  beforeEach(() => {
+    resetLayoutForTests();
+    localStorage.clear();
+  });
+
+  it("keeps the agents navigator view across a reload instead of falling back to files", () => {
+    setWorkbenchView("s1", "agents");
+    expect(getWorkbenchContext("s1").view).toBe("agents");
+
+    const stored = JSON.parse(localStorage.getItem("omp.workbench.v1.s1") ?? "{}") as { view?: string };
+    expect(stored.view).toBe("agents");
+    // A reload re-reads the same record through sanitizeContext.
+    expect(getWorkbenchContext("s1").view).toBe("agents");
+  });
+
+  it("opens one tab per subagent and focuses it instead of duplicating", () => {
+    openSubagentTab("s1", "Scout", "Scout");
+    openSubagentTab("s1", "Review", "Review");
+
+    let context = getWorkbenchContext("s1");
+    expect(context.tabs.map((tab) => [tab.kind, tab.subagentId])).toEqual([
+      ["subagent", "Scout"],
+      ["subagent", "Review"],
+    ]);
+    expect(context.activeTabId).toBe(subagentTabId("Review"));
+
+    openSubagentTab("s1", "Scout", "Scout");
+    context = getWorkbenchContext("s1");
+    expect(context.tabs).toHaveLength(2);
+    expect(context.activeTabId).toBe(subagentTabId("Scout"));
+  });
+
+  it("persists subagent tabs and drops them when the stored row is malformed", () => {
+    openSubagentTab("s1", "Scout", "Scout");
+    const stored = JSON.parse(localStorage.getItem("omp.workbench.v1.s1") ?? "{}") as {
+      tabs?: { kind: string; subagentId?: string }[];
+    };
+    expect(stored.tabs?.map((tab) => [tab.kind, tab.subagentId])).toEqual([["subagent", "Scout"]]);
+
+    resetLayoutForTests();
+    localStorage.setItem("omp.workbench.v1.s2", JSON.stringify({
+      view: "problems",
+      tabs: [
+        { id: "subagent:Broken", kind: "subagent", path: "Broken", title: "Broken" },
+        { id: "subagent:Ok", kind: "subagent", path: "Ok", title: "Ok", subagentId: "Ok" },
+      ],
+      activeTabId: "subagent:Broken",
+    }));
+    const context = getWorkbenchContext("s2");
+    expect(context.tabs.map((tab) => tab.id)).toEqual(["subagent:Ok"]);
+    expect(context.activeTabId).toBe("subagent:Ok");
+    expect(context.view).toBe("problems");
   });
 });

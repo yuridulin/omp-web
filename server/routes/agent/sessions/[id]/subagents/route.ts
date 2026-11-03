@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { json } from "@/server/http";
 import { errorEnvelope, routeContract } from "@/server/contract";
+import { subagentRosterResponseSchema } from "@/server/schemas/agent";
 import { resolveSessionPathOr404 } from "@/lib/api-utils";
 import { extractSubagentHistory } from "@/lib/subagent-history";
 import { getRpcSession } from "@/lib/rpc-manager";
@@ -9,7 +9,7 @@ export const contract = routeContract({
   GET: {
     summary: "List the on-disk subagent roster recovered from a session's task results",
     responses: {
-      200: z.looseObject({ subagents: z.array(z.unknown()) }),
+      200: subagentRosterResponseSchema,
       404: errorEnvelope,
       500: errorEnvelope,
     },

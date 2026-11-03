@@ -424,7 +424,7 @@ export interface paths {
                             id: string;
                             channel: {
                                 /** @enum {string} */
-                                kind: "running" | "notifications" | "session" | "file" | "workspace" | "lsp" | "host-tools";
+                                kind: "running" | "notifications" | "session" | "subagents" | "file" | "workspace" | "lsp" | "host-tools";
                                 clientId?: string;
                                 sessionId?: string;
                                 path?: string;
@@ -2310,7 +2310,64 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            subagents: unknown[];
+                            subagents: ({
+                                id: string;
+                                agent: string;
+                                /** @enum {string} */
+                                agentSource?: "bundled" | "user" | "project";
+                                /** @enum {string} */
+                                status: "started" | "completed" | "failed" | "aborted";
+                                task?: string;
+                                assignment?: string;
+                                description?: string;
+                                index: number;
+                                parentToolCallId?: string;
+                                batchSeq?: number;
+                                sessionFile?: string;
+                                transcriptAvailable: boolean;
+                                detached?: boolean;
+                                lastIntent?: string;
+                                toolCount?: number;
+                                requests?: number;
+                                tokens?: number;
+                                contextTokens?: number;
+                                contextWindow?: number;
+                                cost?: number;
+                                durationMs?: number;
+                                modelOverride?: string | string[];
+                                modelRole?: string;
+                                resolvedModel?: string;
+                                resolvedModelIsFallback?: boolean;
+                                retryFailure?: {
+                                    attempt: number;
+                                    errorMessage: string;
+                                } & {
+                                    [key: string]: unknown;
+                                };
+                                result?: {
+                                    exitCode?: number;
+                                    truncated?: boolean;
+                                    cost?: number;
+                                    structuredOutput?: {
+                                        source?: string;
+                                        mode?: string;
+                                        status?: string;
+                                        error?: string;
+                                    } & {
+                                        [key: string]: unknown;
+                                    };
+                                    error?: string;
+                                    aborted?: boolean;
+                                    abortReason?: string;
+                                    outputPath?: string;
+                                    patchPath?: string;
+                                    branchName?: string;
+                                } & {
+                                    [key: string]: unknown;
+                                };
+                            } & {
+                                [key: string]: unknown;
+                            })[];
                         } & {
                             [key: string]: unknown;
                         };
@@ -2370,12 +2427,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read a page of a subagent's transcript, or its final completion artifact (mode=completion) */
+        /** Read a page of a subagent's transcript (fromByte, the tail, or the page before a byte offset), or its final completion artifact (mode=completion) */
         get: {
             parameters: {
                 query?: {
+                    beforeByte?: string;
                     fromByte?: string;
-                    mode?: "completion";
+                    mode?: "completion" | "tail" | "before";
                 };
                 header?: never;
                 path: {

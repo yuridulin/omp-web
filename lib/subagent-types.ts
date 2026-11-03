@@ -8,69 +8,28 @@ import { asNumber, asString, isRecord } from "./type-guards";
 /** A subagent id as omp writes it into artifact filenames (`<id>.jsonl`); rejects path separators and `..`. */
 export const SUBAGENT_ID_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 
-export type SubagentAgentSource = "bundled" | "user" | "project";
-
-export interface SubagentRetryState {
-  attempt: number;
-  maxAttempts: number;
-  delayMs: number;
-  errorMessage: string;
-  startedAtMs: number;
-}
-
-/** Live per-subagent progress snapshot (oh-my-pi AgentProgress). */
-export interface SubagentProgress {
-  index?: number;
-  id?: string;
-  agent?: string;
-  agentSource?: SubagentAgentSource;
-  status?: "pending" | "running" | "completed" | "failed" | "aborted";
-  task?: string;
-  assignment?: string;
-  description?: string;
-  lastIntent?: string;
-  currentTool?: string;
-  currentToolArgs?: string;
-  currentToolStartMs?: number;
-  recentTools?: Array<{ tool: string; args: string; endMs: number }>;
-  recentOutput?: string[];
-  toolCount?: number;
-  requests?: number;
-  tokens?: number;
-  contextTokens?: number;
-  contextWindow?: number;
-  cost?: number;
-  durationMs?: number;
-  modelOverride?: string | string[];
-  modelRole?: string;
-  resolvedModel?: string;
-  resolvedModelIsFallback?: boolean;
-  retryState?: SubagentRetryState;
-  retryFailure?: { attempt: number; errorMessage: string };
-  inflightTaskDetails?: unknown;
-  extractedToolData?: Record<string, unknown[]>;
-}
-
-/** Compact live-activity entry derived from subagent_event frames. */
-export interface SubagentActivityEvent {
-  kind: "tool" | "text" | "notice";
-  label: string;
-  ts: number;
-}
+// The roster/progress shapes are the core's: `core/subagents.ts` owns the
+// domain and the reducer, so this adapter re-exports rather than redeclaring
+// them (two structurally near-identical interfaces drift apart silently).
+export type {
+  SubagentActivityEvent,
+  SubagentAgentSource,
+  SubagentInfo,
+  SubagentProgress,
+  SubagentResult,
+  SubagentRetryState,
+  SubagentStatus,
+} from "../core/subagents";
+import type {
+  SubagentActivityEvent,
+  SubagentAgentSource,
+  SubagentInfo,
+  SubagentProgress,
+  SubagentResult,
+} from "../core/subagents";
 
 /** Settled per-subagent result from a parent task toolResult (SingleResult). */
-export interface SubagentHistoryResult {
-  exitCode?: number;
-  truncated?: boolean;
-  cost?: number;
-  structuredOutput?: { source?: string; mode?: string; status?: string; error?: string };
-  error?: string;
-  aborted?: boolean;
-  abortReason?: string;
-  outputPath?: string;
-  patchPath?: string;
-  branchName?: string;
-}
+export type SubagentHistoryResult = SubagentResult;
 
 /** On-disk subagent history recovered from a parent session's task toolResults. */
 export interface SubagentHistoryEntry {
@@ -320,35 +279,6 @@ export function parseSubagentActivityEvent(value: unknown): SubagentActivityEven
   return null;
 }
 
-// SubagentInfo is defined here so server-side history and the hook share the
-// same roster shape; hooks/useAgentSession re-exports it for components.
-export interface SubagentInfo {
-  id: string;
-  agent: string;
-  agentSource?: SubagentAgentSource;
-  description?: string;
-  status: "started" | "completed" | "failed" | "aborted";
-  task?: string;
-  assignment?: string;
-  sessionFile?: string;
-  parentToolCallId?: string;
-  /** Position inside the spawning `task` call's batch. Restarts at 0 for every
-   * call, so it orders siblings but never the roster — pair it with `batchSeq`.
-   * Also the matching key for id-less progress frames. */
-  index: number;
-  detached?: boolean;
-  progress?: SubagentProgress;
-  lastUpdate?: number;
-  /** Settled result for history entries (SingleResult-derived). */
-  result?: SubagentHistoryResult;
-  /** Roster origin: live frames/snapshots (default) vs on-disk history. */
-  source?: "live" | "history";
-  /** Ordinal of the `task` call that spawned this agent, as recorded in the
-   * session file. Authoritative launch order, but only available once that
-   * call's result is on disk — `extractSubagentHistory` supplies it. */
-  batchSeq?: number;
-}
-
 /** Ordinal for sorting: a batch the file has not recorded yet sorts last. */
 const batchSeqOf = (subagent: SubagentInfo): number =>
   subagent.batchSeq ?? Number.MAX_SAFE_INTEGER;
@@ -400,4 +330,51 @@ export function mergeSubagentRoster(
     byId.set(entry.id, { ...existing, ...entry, batchSeq });
   }
   return [...byId.values()].sort(compareSubagents);
+}
+
+/**
+ * On-disk history row → roster row.
+ *
+ * The transcript path travels only when the artifact actually resolves, so the
+ * wire projection (`subagentWireInfo`) can derive `transcriptAvailable` from it
+ * and a client never sees an absolute path. Settled telemetry (tokens, cost,
+ * model, tool count) moves into `progress`, the field the roster renders.
+ */
+export function historyToRosterInfo(entry: SubagentHistoryEntry): SubagentInfo {
+  const info: SubagentInfo = {
+    id: entry.id,
+    agent: entry.agent,
+    status: entry.status,
+    index: entry.index,
+    source: "history",
+  };
+  if (entry.agentSource !== undefined) info.agentSource = entry.agentSource;
+  if (entry.description !== undefined) info.description = entry.description;
+  if (entry.task !== undefined) info.task = entry.task;
+  if (entry.assignment !== undefined) info.assignment = entry.assignment;
+  if (entry.parentToolCallId !== undefined) info.parentToolCallId = entry.parentToolCallId;
+  if (entry.batchSeq !== undefined) info.batchSeq = entry.batchSeq;
+  if (entry.detached !== undefined) info.detached = entry.detached;
+  // Folded into a fresh literal: the core roster types a result as a plain
+  // record, and the settled interface has no index signature of its own.
+  if (entry.result !== undefined) info.result = { ...entry.result };
+  if (entry.transcriptAvailable && entry.sessionFile !== undefined && entry.sessionFile !== "") {
+    info.sessionFile = entry.sessionFile;
+  }
+  const progress: SubagentProgress = {};
+  if (entry.lastIntent !== undefined) progress.lastIntent = entry.lastIntent;
+  if (entry.toolCount !== undefined) progress.toolCount = entry.toolCount;
+  if (entry.requests !== undefined) progress.requests = entry.requests;
+  if (entry.tokens !== undefined) progress.tokens = entry.tokens;
+  if (entry.contextTokens !== undefined) progress.contextTokens = entry.contextTokens;
+  if (entry.contextWindow !== undefined) progress.contextWindow = entry.contextWindow;
+  if (entry.cost !== undefined) progress.cost = entry.cost;
+  if (entry.durationMs !== undefined) progress.durationMs = entry.durationMs;
+  if (entry.modelOverride !== undefined) progress.modelOverride = entry.modelOverride;
+  if (entry.modelRole !== undefined) progress.modelRole = entry.modelRole;
+  if (entry.resolvedModel !== undefined) progress.resolvedModel = entry.resolvedModel;
+  if (entry.resolvedModelIsFallback !== undefined) progress.resolvedModelIsFallback = entry.resolvedModelIsFallback;
+  if (entry.retryFailure !== undefined) progress.retryFailure = entry.retryFailure;
+  if (Object.keys(progress).length > 0) info.progress = progress;
+  return info;
 }

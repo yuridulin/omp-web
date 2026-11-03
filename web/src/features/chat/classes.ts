@@ -121,10 +121,23 @@ export interface ExtensionDialogClasses {
   submit: string;
 }
 
+export interface RunningAgentsClasses {
+  strip: string;
+  row: string;
+  icon: string;
+  name: string;
+  task: string;
+  state: string;
+  pulse: string;
+  time: string;
+  more: string;
+}
+
 export interface ChatClasses {
   transcript: TranscriptClasses;
   composer: ComposerClasses;
   queue: QueueClasses;
   modelPicker: ModelPickerClasses;
   extensionDialog: ExtensionDialogClasses;
+  runningAgents: RunningAgentsClasses;
 }

@@ -1,0 +1,173 @@
+/*
+ * One subagent's read-only view. Only tokens from `styles/tokens.css` plus the
+ * local variables declared on the root; both themes get the same result because
+ * every palette name exists in both palettes.
+ */
+
+.view {
+  --subagent-header-gap: var(--space-2);
+  --subagent-task-max: 45vh;
+  --subagent-dot: 6px;
+
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subagent-header-gap);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--space-3);
+}
+
+.headline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.name {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.statusRunning {
+  color: var(--success);
+}
+
+.statusFailed {
+  color: var(--error);
+}
+
+.pulse {
+  width: var(--subagent-dot);
+  height: var(--subagent-dot);
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.meta b {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+}
+
+.taskBlock {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/* Clamped with a line clamp (not a height clip) so the cut ends on a whole
+   line instead of slicing a glyph in half. */
+.task {
+  display: -webkit-box;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  padding: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.taskExpanded {
+  overflow-y: auto;
+  max-height: var(--subagent-task-max);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  padding: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+}
+
+.taskToggle {
+  border: 0;
+  background: transparent;
+  padding: 0 var(--space-1);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.taskToggle:hover {
+  text-decoration: underline;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.noticeError {
+  margin: 0;
+  color: var(--error);
+  font-size: var(--text-xs);
+}
+
+.footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--space-1) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.footer kbd {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 0 var(--space-1);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.spacer {
+  flex: 1;
+}

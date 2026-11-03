@@ -3,6 +3,7 @@ import composer from "./composer.module.css";
 import extensionDialog from "./extension-dialog.module.css";
 import modelPicker from "./model-picker.module.css";
 import queue from "./queue-panel.module.css";
+import runningAgents from "./running-agents.module.css";
 import transcript from "./transcript.module.css";
 
 /**
@@ -16,4 +17,5 @@ export const dshChatClasses: ChatClasses = {
   queue: queue as unknown as ChatClasses["queue"],
   modelPicker: modelPicker as unknown as ChatClasses["modelPicker"],
   extensionDialog: extensionDialog as unknown as ChatClasses["extensionDialog"],
+  runningAgents: runningAgents as unknown as ChatClasses["runningAgents"],
 };

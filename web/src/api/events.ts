@@ -39,6 +39,7 @@ function parseFrame(raw: string): SseFrame | null {
 export type Channel =
   | { kind: "running" }
   | { kind: "session"; sessionId: string }
+  | { kind: "subagents"; sessionId: string }
   | { kind: "workspace"; root: string }
   | { kind: "lsp"; root: string }
   | { kind: "file"; path: string; sessionId: string | null }

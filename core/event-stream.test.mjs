@@ -20,6 +20,10 @@ test("accepts every channel kind with a valid payload", () => {
   assert.deepEqual(parseEventStreamChannel({ kind: "host-tools" }), { kind: "host-tools" });
   assert.deepEqual(parseEventStreamChannel({ kind: "session", sessionId: "abc" }), { kind: "session", sessionId: "abc" });
   assert.deepEqual(
+    parseEventStreamChannel({ kind: "subagents", sessionId: "abc" }),
+    { kind: "subagents", sessionId: "abc" },
+  );
+  assert.deepEqual(
     parseEventStreamChannel({ kind: "notifications", clientId: "abcdefgh" }),
     { kind: "notifications", clientId: "abcdefgh" },
   );
@@ -48,6 +52,9 @@ test("rejects malformed or unbounded channel payloads", () => {
   assert.equal(parseEventStreamChannel({ kind: "session" }), null);
   assert.equal(parseEventStreamChannel({ kind: "session", sessionId: "" }), null);
   assert.equal(parseEventStreamChannel({ kind: "session", sessionId: "x".repeat(513) }), null);
+  assert.equal(parseEventStreamChannel({ kind: "subagents" }), null);
+  assert.equal(parseEventStreamChannel({ kind: "subagents", sessionId: "" }), null);
+  assert.equal(parseEventStreamChannel({ kind: "subagents", sessionId: "x".repeat(513) }), null);
   assert.equal(parseEventStreamChannel({ kind: "file", path: "", }), null);
   assert.equal(parseEventStreamChannel({ kind: "file", path: "/a", sessionId: 5 }), null);
   assert.equal(parseEventStreamChannel({ kind: "workspace", root: "" }), null);

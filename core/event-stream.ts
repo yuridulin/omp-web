@@ -25,6 +25,8 @@ export type EventStreamChannel =
   /** Notifications the server routes to the tab with this notification client id. */
   | { kind: "notifications"; clientId: string }
   | { kind: "session"; sessionId: string }
+  /** Roster of one session's subagents, live or recovered from disk. */
+  | { kind: "subagents"; sessionId: string }
   | { kind: "file"; path: string; sessionId: string | null }
   /** Recursive file changes under one authorized workspace root. */
   | { kind: "workspace"; root: string }
@@ -61,6 +63,8 @@ export function parseEventStreamChannel(value: unknown): EventStreamChannel | nu
       return { kind: "host-tools" };
     case "session":
       return isBoundedString(channel.sessionId, MAX_ID_LENGTH) ? { kind: "session", sessionId: channel.sessionId } : null;
+    case "subagents":
+      return isBoundedString(channel.sessionId, MAX_ID_LENGTH) ? { kind: "subagents", sessionId: channel.sessionId } : null;
     case "workspace":
       return isBoundedString(channel.root, MAX_PATH_LENGTH) ? { kind: "workspace", root: channel.root } : null;
     case "lsp":

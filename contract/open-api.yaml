@@ -427,6 +427,7 @@ paths:
                             - running
                             - notifications
                             - session
+                            - subagents
                             - file
                             - workspace
                             - lsp
@@ -2629,7 +2630,124 @@ paths:
                 properties:
                   subagents:
                     type: array
-                    items: {}
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        agent:
+                          type: string
+                        agentSource:
+                          type: string
+                          enum:
+                            - bundled
+                            - user
+                            - project
+                        status:
+                          type: string
+                          enum:
+                            - started
+                            - completed
+                            - failed
+                            - aborted
+                        task:
+                          type: string
+                        assignment:
+                          type: string
+                        description:
+                          type: string
+                        index:
+                          type: number
+                        parentToolCallId:
+                          type: string
+                        batchSeq:
+                          type: number
+                        sessionFile:
+                          type: string
+                        transcriptAvailable:
+                          type: boolean
+                        detached:
+                          type: boolean
+                        lastIntent:
+                          type: string
+                        toolCount:
+                          type: number
+                        requests:
+                          type: number
+                        tokens:
+                          type: number
+                        contextTokens:
+                          type: number
+                        contextWindow:
+                          type: number
+                        cost:
+                          type: number
+                        durationMs:
+                          type: number
+                        modelOverride:
+                          anyOf:
+                            - type: string
+                            - type: array
+                              items:
+                                type: string
+                        modelRole:
+                          type: string
+                        resolvedModel:
+                          type: string
+                        resolvedModelIsFallback:
+                          type: boolean
+                        retryFailure:
+                          type: object
+                          properties:
+                            attempt:
+                              type: number
+                            errorMessage:
+                              type: string
+                          required:
+                            - attempt
+                            - errorMessage
+                          additionalProperties: {}
+                        result:
+                          type: object
+                          properties:
+                            exitCode:
+                              type: number
+                            truncated:
+                              type: boolean
+                            cost:
+                              type: number
+                            structuredOutput:
+                              type: object
+                              properties:
+                                source:
+                                  type: string
+                                mode:
+                                  type: string
+                                status:
+                                  type: string
+                                error:
+                                  type: string
+                              additionalProperties: {}
+                            error:
+                              type: string
+                            aborted:
+                              type: boolean
+                            abortReason:
+                              type: string
+                            outputPath:
+                              type: string
+                            patchPath:
+                              type: string
+                            branchName:
+                              type: string
+                          additionalProperties: {}
+                      required:
+                        - id
+                        - agent
+                        - status
+                        - index
+                        - transcriptAvailable
+                      additionalProperties: {}
                 required:
                   - subagents
                 additionalProperties: {}
@@ -2671,7 +2789,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
   /api/agent/sessions/{id}/subagents/{subagentId}:
     get:
-      summary: Read a page of a subagent's transcript, or its final completion artifact (mode=completion)
+      summary: Read a page of a subagent's transcript (fromByte, the tail, or the page before a byte offset), or its final completion artifact (mode=completion)
       parameters:
         - name: id
           in: path
@@ -2681,6 +2799,11 @@ paths:
         - name: subagentId
           in: path
           required: true
+          schema:
+            type: string
+        - name: beforeByte
+          in: query
+          required: false
           schema:
             type: string
         - name: fromByte
@@ -2695,6 +2818,8 @@ paths:
             type: string
             enum:
               - completion
+              - tail
+              - before
       responses:
         "200":
           description: OK

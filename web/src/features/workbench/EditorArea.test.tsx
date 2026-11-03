@@ -1,6 +1,7 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchTab } from "@/layout/layout-store";
+import { testTranscriptClasses } from "@/features/chat/test-classes";
 import { EditorArea, retainTerminals } from "./EditorArea";
 
 vi.mock("./TerminalView", () => ({
@@ -36,6 +37,7 @@ describe("EditorArea terminals", () => {
         roots={["D:/repo"]}
         tabs={tabs}
         activeTabId="t1"
+        transcriptClasses={testTranscriptClasses}
         onTabScroll={() => {}}
       />,
     );
@@ -50,6 +52,7 @@ describe("EditorArea terminals", () => {
         roots={["D:/repo"]}
         tabs={tabs}
         activeTabId="t2"
+        transcriptClasses={testTranscriptClasses}
         onTabScroll={() => {}}
       />,
     );

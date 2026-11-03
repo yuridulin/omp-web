@@ -18,7 +18,7 @@ import {
   useExtensionRequest,
   type ExtensionResponse,
 } from "@/state/extension-store";
-import { useSessionStream } from "@/state/event-stream";
+import { useSessionStream, useSubagentsStream } from "@/state/event-stream";
 import { useListedSession } from "@/state/session-catalog";
 import type { SessionSummary } from "@/api/workspace";
 import { bumpStreamGeneration, useStreamGeneration } from "@/state/stream-generation";
@@ -82,6 +82,9 @@ export function ChatColumn({ selected, pendingSession, externalError, externalSe
   );
   const streamGeneration = useStreamGeneration();
   const { error: streamError } = useSessionStream(selected, streamGeneration);
+  // One subscription per open session: the running strip above the composer and
+  // the agents view read the same roster store, so neither owns the channel.
+  useSubagentsStream(selected, streamGeneration);
   const extensionRequest = useExtensionRequest(selected);
   const extensionRequestId = extensionRequest?.id ?? null;
   const [extensionBusy, setExtensionBusy] = useState(false);

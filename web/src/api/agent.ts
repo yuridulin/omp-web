@@ -63,7 +63,8 @@ export class IntentError extends Error {
   }
 }
 
-function errorInfo(value: unknown, status: number): { message: string; code: string | null } {
+/** Read `{ error, code }` off a failed contract response (shared by API modules). */
+export function errorInfo(value: unknown, status: number): { message: string; code: string | null } {
   if (isRecord(value)) {
     return {
       message: typeof value.error === "string" ? value.error : `HTTP ${status}`,

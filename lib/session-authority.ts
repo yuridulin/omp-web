@@ -1,10 +1,21 @@
 import { SessionMachine, type DispatchResult, type Snapshot } from "../core/machine";
 import type { ChatIntent } from "../core/commands";
 import { parseDraft } from "../core/drafts";
+import {
+  EMPTY_SUBAGENTS,
+  mergeRoster,
+  parseSubagentLifecycle,
+  reduceSubagents,
+  subagentWireInfo,
+  type SubagentsSnapshot,
+  type SubagentsState,
+} from "../core/subagents";
 import type { AgentMessage } from "../core/types";
 import type { Clock, DraftStorage, Transport } from "../core/ports";
 import { clearDraft, getDraft, setDraft } from "./draft-store";
 import type { AgentEvent } from "./rpc-manager";
+import { extractSubagentHistory } from "./subagent-history";
+import { historyToRosterInfo } from "./subagent-types";
 import {
   buildSessionContext,
   getSessionEntriesForDisplayAsync,
@@ -47,6 +58,10 @@ export interface SessionView {
   includePreCompaction: boolean;
 }
 
+/** How often live subagent frames reach subscribers; a terminal frame bypasses
+ * this so a finished agent never lingers as "working". */
+const SUBAGENTS_NOTIFY_INTERVAL_MS = 100;
+
 function draftStorage(): DraftStorage {
   return {
     read: (sessionId) => getDraft(sessionId),
@@ -87,6 +102,14 @@ export class SessionAuthority {
   #loading: Promise<void> | null = null;
   #loadedRevision = -1;
   #disposed = false;
+  #subagents: SubagentsState = EMPTY_SUBAGENTS;
+  #subagentRevision = 0;
+  #subagentListeners = new Set<(snapshot: SubagentsSnapshot) => void>();
+  #subagentSeed: Promise<void> | null = null;
+  #subagentSeeded = false;
+  #subagentTimer: NodeJS.Timeout | null = null;
+  #subagentNotifiedAt = 0;
+  #detachSubagentFrames: (() => void) | null = null;
 
   constructor(session: AuthoritySession, options: SessionAuthorityOptions = {}) {
     this.#session = session;
@@ -151,11 +174,127 @@ export class SessionAuthority {
   /** Follow the wrapper's identity without resetting the live conversation. */
   setSessionId(sessionId: string): void {
     this.#machine.setSessionId(sessionId);
+    // A replaced child may have written new task results the current roster
+    // has not seen yet.
+    void this.seedSubagents();
   }
 
   /** Drop in-flight output; the host calls this when a run/command ends. */
   clearLive(): void {
     this.#machine.clearLive();
+  }
+
+  /**
+   * The session's subagent roster as clients see it: wire-projected (no paths)
+   * and tagged with whether a live wrapper is feeding it.
+   */
+  get subagents(): SubagentsSnapshot {
+    return {
+      revision: this.#subagentRevision,
+      live: this.#session.isAlive(),
+      roster: this.#subagents.roster.map(subagentWireInfo),
+      activity: this.#subagents.activity,
+      transcriptVersions: this.#subagents.transcriptVersions,
+    };
+  }
+
+  /**
+   * Subscribe to the session's subagent roster.
+   *
+   * The on-disk roster is seeded on the first subscription, so a page reload (or
+   * a session whose wrapper is already gone) still lists what happened. The
+   * frame observer is installed once and kept until dispose: a later subscriber
+   * must not depend on a seed alone, or agents that started while nobody was
+   * watching would never appear.
+   */
+  subscribeSubagents(listener: (snapshot: SubagentsSnapshot) => void): () => void {
+    this.#subagentListeners.add(listener);
+    this.#observeSubagentFrames();
+    void this.seedSubagents();
+    return () => {
+      this.#subagentListeners.delete(listener);
+    };
+  }
+
+  /** Merge the on-disk roster in. Idempotent; safe to call repeatedly. */
+  seedSubagents(): Promise<void> {
+    if (this.#subagentSeed) return this.#subagentSeed;
+    const seed = (async () => {
+      const filePath = this.#session.sessionFile || (await resolveSessionPath(this.#session.sessionId));
+      if (this.#disposed || !filePath) return;
+      let history;
+      try {
+        history = extractSubagentHistory(filePath);
+      } catch {
+        // An unreadable parent file leaves the live roster as the only source.
+        return;
+      }
+      if (this.#disposed) return;
+      this.#subagentSeeded = true;
+      if (history.length === 0) return;
+      const roster = mergeRoster(this.#subagents.roster, history.map(historyToRosterInfo));
+      this.#subagents = { ...this.#subagents, roster };
+      this.#notifySubagents();
+    })().catch(() => {}).finally(() => {
+      if (this.#subagentSeed === seed) this.#subagentSeed = null;
+    });
+    this.#subagentSeed = seed;
+    return seed;
+  }
+
+  #observeSubagentFrames(): void {
+    if (this.#detachSubagentFrames || this.#disposed) return;
+    this.#detachSubagentFrames = this.#session.onFrame((event) => this.#applySubagentFrame(event));
+  }
+
+  #applySubagentFrame(event: AgentEvent): void {
+    if (this.#disposed) return;
+    const type = event.type;
+    if (type !== "subagent_lifecycle" && type !== "subagent_progress" && type !== "subagent_event") return;
+    const now = typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+      ? event.timestamp
+      : Date.now();
+    const next = reduceSubagents(this.#subagents, { type, payload: event.payload }, now);
+    // A terminal lifecycle frame flushes immediately; throttled progress frames
+    // would otherwise leave a finished agent displayed as working.
+    const settled = type === "subagent_lifecycle"
+      && parseSubagentLifecycle(event.payload, now)?.status !== "started";
+    if (next !== this.#subagents) {
+      this.#subagents = next;
+      if (settled) this.#notifySubagents();
+      else this.#notifySubagentsSoon();
+    }
+    // The roster fold needs the on-disk launch order (`batchSeq`); seeding here
+    // keeps that ordering even when frames arrive before anyone subscribed.
+    if (!this.#subagentSeeded) void this.seedSubagents();
+  }
+
+  #notifySubagentsSoon(): void {
+    if (this.#subagentTimer) return;
+    const wait = Math.max(0, SUBAGENTS_NOTIFY_INTERVAL_MS - (Date.now() - this.#subagentNotifiedAt));
+    this.#subagentTimer = setTimeout(() => {
+      this.#subagentTimer = null;
+      this.#notifySubagents();
+    }, wait);
+    // A UI throttle must never hold the process open.
+    this.#subagentTimer.unref?.();
+  }
+
+  #notifySubagents(): void {
+    if (this.#disposed) return;
+    if (this.#subagentTimer) {
+      clearTimeout(this.#subagentTimer);
+      this.#subagentTimer = null;
+    }
+    this.#subagentNotifiedAt = Date.now();
+    this.#subagentRevision += 1;
+    const snapshot = this.subagents;
+    for (const listener of this.#subagentListeners) {
+      // One broken subscriber must not stop the others (or the wrapper).
+      try {
+        listener(snapshot);
+      } catch { /* ignore */ }
+    }
   }
 
   /** Start a new stream epoch after an identity change or child restart. */
@@ -166,6 +305,13 @@ export class SessionAuthority {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    if (this.#subagentTimer) {
+      clearTimeout(this.#subagentTimer);
+      this.#subagentTimer = null;
+    }
+    this.#subagentListeners.clear();
+    this.#detachSubagentFrames?.();
+    this.#detachSubagentFrames = null;
     this.#machine.close();
   }
 

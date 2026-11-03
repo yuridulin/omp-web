@@ -67,6 +67,21 @@ export interface SubagentActivityEvent {
   ts: number;
 }
 
+/** Settled per-subagent result (`SingleResult`-derived, from the parent's
+ * `task` toolResult). */
+export interface SubagentResult {
+  exitCode?: number;
+  truncated?: boolean;
+  cost?: number;
+  structuredOutput?: { source?: string; mode?: string; status?: string; error?: string };
+  error?: string;
+  aborted?: boolean;
+  abortReason?: string;
+  outputPath?: string;
+  patchPath?: string;
+  branchName?: string;
+}
+
 export interface SubagentInfo {
   id: string;
   agent: string;
@@ -82,7 +97,7 @@ export interface SubagentInfo {
   detached?: boolean;
   progress?: SubagentProgress;
   lastUpdate?: number;
-  result?: Record<string, unknown>;
+  result?: SubagentResult;
   /** Roster origin: live frames (default) vs on-disk history. */
   source?: "live" | "history";
   /** Ordinal of the `task` call that spawned this agent, as recorded on disk. */
@@ -308,6 +323,34 @@ export interface SubagentsState {
   roster: readonly SubagentInfo[];
   activity: Readonly<Record<string, readonly SubagentActivityEvent[]>>;
   transcriptVersions: Readonly<Record<string, number>>;
+}
+
+/** A roster row as it travels to clients: the on-disk transcript path is an
+ * internal detail, so the wire carries only whether it is readable. */
+export type SubagentWireInfo = Omit<SubagentInfo, "sessionFile"> & {
+  transcriptAvailable: boolean;
+};
+
+/** One `subagents` channel frame — a complete roster snapshot. */
+export interface SubagentsFrame {
+  type: "subagents";
+  revision: number;
+  /** False when only the on-disk roster is known (no live wrapper feeds it). */
+  live: boolean;
+  roster: readonly SubagentWireInfo[];
+  activity: Readonly<Record<string, readonly SubagentActivityEvent[]>>;
+  /** Per-subagent counter bumped when its transcript gained content, so a
+   * reader knows to fetch the next page instead of polling. */
+  transcriptVersions: Readonly<Record<string, number>>;
+}
+
+/** Frame payload without the discriminant, the shape a server snapshot takes. */
+export type SubagentsSnapshot = Omit<SubagentsFrame, "type">;
+
+/** Project a roster row onto the wire: drop the path, keep a readable flag. */
+export function subagentWireInfo(info: SubagentInfo): SubagentWireInfo {
+  const { sessionFile, ...rest } = info;
+  return { ...rest, transcriptAvailable: sessionFile !== undefined && sessionFile !== "" };
 }
 
 export const EMPTY_SUBAGENTS: SubagentsState = Object.freeze({

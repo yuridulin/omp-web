@@ -19,6 +19,7 @@ The browser holds **one** SSE response and multiplexes every channel over it.
 | `{ kind: "running" }` | `running` (ids + running/exited sessions), `sessions-changed` |
 | `{ kind: "notifications", clientId }` | `notification` routed to this tab |
 | `{ kind: "session", sessionId }` | `connected`, authoritative `snapshot`, raw omp frames (debug only) |
+| `{ kind: "subagents", sessionId }` | `subagents` roster + live activity of the session's subagents |
 | `{ kind: "workspace", root }` | `workspace-changed` for an authorized root |
 | `{ kind: "lsp", root }` | `lsp-diagnostics` for documents under an authorized root |
 | `{ kind: "file", path, sessionId? }` | change notifications for one file |
@@ -39,6 +40,44 @@ The browser holds **one** SSE response and multiplexes every channel over it.
   channel and must not be used as the UI state source.
 - Under backpressure the server coalesces `message_update` and `snapshot`
   frames to the latest one; the full snapshot is always safe to replace state.
+
+### `subagents`
+
+The roster of one session's subagents (`task` tool calls), composed by the
+server: the on-disk roster recovered from the parent's `task` toolResults,
+overlaid with the live `subagent_lifecycle` / `subagent_progress` /
+`subagent_event` frames of that session's wrapper.
+
+```json
+{
+  "type": "subagents",
+  "revision": 12,
+  "roster": [
+    { "id": "EngineCore", "agent": "task", "status": "started", "index": 0,
+      "batchSeq": 0, "transcriptAvailable": true, "toolCount": 9, "tokens": 12040 }
+  ],
+  "activity": { "EngineCore": [{ "kind": "tool", "label": "→ read core/reducer.ts", "ts": 1792584407106 }] },
+  "transcriptVersions": { "EngineCore": 7 }
+}
+```
+
+- **No 409.** A session without a live wrapper still answers with its on-disk
+  roster, so a reopened session shows finished agents; only the on-disk part is
+  present there.
+- **Full snapshots, not deltas.** `roster` is ordered (`batchSeq`, then `index`,
+  then `id`) and `activity` keeps the most recent 50 entries per id. `revision`
+  increments per snapshot so a client can drop out-of-order frames. Intermediate
+  `subagent_progress` snapshots coalesce under load; a terminal status always
+  flushes immediately.
+- **Live wins over history** for the same id, and a settled status is never
+  regressed by a stale snapshot.
+- `transcriptVersions[id]` counts content added to that agent's transcript. A
+  reader compares the number it saw last and fetches the next transcript page
+  instead of polling; activity entries are capped, versions are not.
+- `roster[].transcriptAvailable` replaces the absolute transcript path: the
+  browser reads it through `GET /api/agent/sessions/{id}/subagents/{subagentId}`
+  (`mode=tail` for the last page, `fromByte` for paging, `mode=completion` for
+  the final artifact).
 
 ### `workspace`
 
