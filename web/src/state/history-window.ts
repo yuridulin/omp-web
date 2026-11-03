@@ -128,7 +128,22 @@ function parsePage(value: unknown): HistoryPage | null {
   };
 }
 
-async function fetchPage(sessionId: string, query: { tail?: boolean; before?: string; cursor?: HistoryCursor }): Promise<HistoryPage> {
+/** Retry budget for one page read. The server already retries its own file
+ * races; a socket error or proxy hiccup must not leave the window stale until
+ * the next revision, which at the end of a run may never come. */
+const PAGE_RETRY_DELAYS_MS = [120, 400] as const;
+
+class HistoryPageError extends Error {
+  constructor(readonly retryable: boolean, message: string) {
+    super(message);
+    this.name = "HistoryPageError";
+  }
+}
+
+async function fetchPageOnce(
+  sessionId: string,
+  query: { tail?: boolean; before?: string; cursor?: HistoryCursor },
+): Promise<HistoryPage> {
   const search = new URLSearchParams({
     sync: "1",
     deferThinking: "1",
@@ -142,11 +157,35 @@ async function fetchPage(sessionId: string, query: { tail?: boolean; before?: st
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const message = isRecord(body) && typeof body.error === "string" ? body.error : `HTTP ${response.status}`;
-    throw new Error(message);
+    // 4xx is a real answer (missing session, page too large); a 5xx may be the
+    // server losing a race with the writer and is worth another attempt.
+    throw new HistoryPageError(response.status >= 500, message);
   }
   const page = parsePage(body);
-  if (!page) throw new Error("Unexpected history page");
+  if (!page) throw new HistoryPageError(true, "Unexpected history page");
   return page;
+}
+
+function retryDelay(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
+}
+
+async function fetchPage(
+  sessionId: string,
+  query: { tail?: boolean; before?: string; cursor?: HistoryCursor },
+): Promise<HistoryPage> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fetchPageOnce(sessionId, query);
+    } catch (error) {
+      const retryable = error instanceof HistoryPageError ? error.retryable : true;
+      const delay = retryable ? PAGE_RETRY_DELAYS_MS[attempt] : undefined;
+      if (delay === undefined) throw error;
+      await retryDelay(delay);
+    }
+  }
 }
 
 function applyReplace(sessionId: string, page: HistoryPage, previous: HistoryWindow): void {

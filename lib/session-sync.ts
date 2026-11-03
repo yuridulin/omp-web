@@ -10,6 +10,7 @@ import {
   type HistoryRange,
 } from "../core/history.ts";
 import type { Snapshot } from "../core/machine";
+import { SessionChangedWhileReadingError } from "./session-reader";
 import type { SessionContext } from "./types";
 
 export {
@@ -55,4 +56,36 @@ export function selectSessionHistory(
   limit = MAX_SYNC_MESSAGES,
 ): SessionHistoryPage {
   return paginateContext(context, cursor, limit);
+}
+
+/** Attempts for one page read that races omp's own session-file appends. */
+export const HISTORY_READ_ATTEMPTS = 4;
+/** Pause between retries; long enough for an append to finish, short enough
+ * that a sync is not visibly delayed. */
+export const HISTORY_READ_RETRY_MS = 12;
+
+/**
+ * Read a history page, retrying while omp appends to the session file.
+ *
+ * A page read validates the file version before and after seeking, so a message
+ * settling mid-read throws. Surfacing that as HTTP 500 made the client drop the
+ * sync; at the end of a run the last page — the answer — then stayed missing
+ * until some later revision happened to arrive. The file is append-only, so
+ * re-reading once the writer is done is the correct response.
+ */
+export async function readHistoryPageSettled<T>(read: () => T): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return read();
+    } catch (error) {
+      if (!(error instanceof SessionChangedWhileReadingError) || attempt + 1 >= HISTORY_READ_ATTEMPTS) throw error;
+    }
+    await retryDelay();
+  }
+}
+
+function retryDelay(): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, HISTORY_READ_RETRY_MS);
+  return promise;
 }

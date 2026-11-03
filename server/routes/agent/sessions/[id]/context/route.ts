@@ -8,7 +8,7 @@ import { buildSessionContext, getSessionContextBoundary, getSessionEntriesForDis
 import { apiErrorBody, resolveSessionPathOr404 } from "@/lib/api-utils";
 import { getRpcSession } from "@/lib/rpc-manager";
 import { getSessionAuthority } from "@/lib/session-authority-registry";
-import { MAX_SYNC_MESSAGES, parseHistoryCursor, selectSessionHistory, type SessionHistoryCursor, type SessionSyncResponse } from "@/lib/session-sync";
+import { MAX_SYNC_MESSAGES, parseHistoryCursor, readHistoryPageSettled, selectSessionHistory, type SessionHistoryCursor, type SessionSyncResponse } from "@/lib/session-sync";
 
 /** Uniform error mapping for this route: the display read throws
  * SessionFileTooLargeError on files past the load ceiling, which must surface
@@ -158,16 +158,17 @@ export async function GET(
       return json({ error: "Session file is missing or malformed", code: "session_file_malformed" }, { status: 404 });
     }
     if (boundary === "1") {
-      return json(getSessionContextBoundary(filePath), { headers: { "Cache-Control": "no-store" } });
+      const boundaryIds = await readHistoryPageSettled(() => getSessionContextBoundary(filePath));
+      return json(boundaryIds, { headers: { "Cache-Control": "no-store" } });
     }
     if (sync === "1") {
-      const page = await getSessionHistoryPage(filePath, cursor, limit, leafId, {
+      const page = await readHistoryPageSettled(() => getSessionHistoryPage(filePath, cursor, limit, leafId, {
         deferThinking,
         deferToolResultImages,
         includePreCompaction,
         ...(tail === "1" ? { tail: true } : {}),
         ...(before !== null ? { before } : {}),
-      });
+      }));
       // Sample AFTER the disk read: a quiet active run still supplies its most
       // recent partial output, and events arriving during the read win.
       const session = getRpcSession(id);

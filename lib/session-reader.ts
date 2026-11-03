@@ -441,6 +441,22 @@ export class SessionFileTooLargeError extends Error {
 }
 
 /**
+ * The session file moved between building the history index and seeking a page.
+ * omp appends an entry as each message settles, so this is an ordinary race, not
+ * a corrupt file: the page read must be retried against the new version.
+ */
+export class SessionChangedWhileReadingError extends Error {
+  readonly code = "session_changed_while_reading" as const;
+  constructor(
+    /** `indexing`, `before`, `while` or `truncated` — where the version moved. */
+    readonly phase: "indexing" | "before" | "while" | "truncated",
+  ) {
+    super(phase === "truncated" ? "Session truncated while reading history" : `Session changed while ${phase === "indexing" ? "indexing" : "reading"} history`);
+    this.name = "SessionChangedWhileReadingError";
+  }
+}
+
+/**
  * Display-path entry read for the session/context routes: reuses the memoized
  * (size, mtimeMs) parse cache WITHOUT blob resolution for entries that don't
  * reference blobs, and deep-copies ONLY the entries that do before resolving
@@ -674,7 +690,7 @@ function getSessionHistoryIndex(filePath: string, leafId?: string, includePreCom
   let index = cache.get(key);
   if (!index) {
     index = buildHistoryIndex(filePath, version, leafId, includePreCompaction);
-    if (stat && historyFileVersion(statSync(filePath)) !== version) throw new Error("Session changed while indexing history");
+    if (stat && historyFileVersion(statSync(filePath)) !== version) throw new SessionChangedWhileReadingError("indexing");
     // An unusually metadata-heavy file still opens, but cannot evict every
     // peer or retain more than the entire index budget by itself.
     if (stat && index.bytes <= MAX_HISTORY_INDEX_BYTES) cache.set(key, index);
@@ -727,14 +743,14 @@ export function getSessionHistoryPage(
   if (start < end) {
     const fd = openSync(filePath, "r");
     try {
-      if (historyFileVersion(fstatSync(fd)) !== version) throw new Error("Session changed before reading history");
+      if (historyFileVersion(fstatSync(fd)) !== version) throw new SessionChangedWhileReadingError("before");
       for (let i = start; i < end; i++) {
         const row = index.rows[i];
         const buffer = Buffer.allocUnsafe(row.length);
         let read = 0;
         while (read < buffer.length) {
           const count = readSync(fd, buffer, read, buffer.length - read, row.offset + read);
-          if (count === 0) throw new Error("Session truncated while reading history");
+          if (count === 0) throw new SessionChangedWhileReadingError("truncated");
           read += count;
         }
         const entry = JSON.parse(buffer.toString("utf8").trim()) as SessionEntry;
@@ -749,7 +765,7 @@ export function getSessionHistoryPage(
         rawEntries.push(entry);
       }
       if (historyFileVersion(fstatSync(fd)) !== version || historyFileVersion(statSync(filePath)) !== version) {
-        throw new Error("Session changed while reading history");
+        throw new SessionChangedWhileReadingError("while");
       }
     } catch (error) {
       cache.delete(key);
