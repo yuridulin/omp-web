@@ -22,6 +22,7 @@ export function RailSkin({
   draftId,
   running,
   unseen,
+  hideInactiveAfterDays,
   loading,
   error,
   onSelect,
@@ -36,6 +37,7 @@ export function RailSkin({
   const [searchOpen, setSearchOpen] = useState(false);
   const [runningOnly, setRunningOnly] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [olderOpen, setOlderOpen] = useState<Set<string>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const restoreSearchFocus = useRef(false);
@@ -50,12 +52,30 @@ export function RailSkin({
   }, [searchOpen]);
 
   const view = useMemo(
-    () => buildRailView({ sessions, projects, running, query, runningOnly }),
-    [sessions, projects, running, query, runningOnly],
+    () =>
+      buildRailView({
+        sessions,
+        projects,
+        running,
+        query,
+        runningOnly,
+        inactiveAfterDays: hideInactiveAfterDays,
+        selectedId: selected,
+      }),
+    [sessions, projects, running, query, runningOnly, hideInactiveAfterDays, selected],
   );
 
   const toggleGroup = (key: string) => {
     setCollapsed((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleOlder = (key: string) => {
+    setOlderOpen((previous) => {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -194,6 +214,7 @@ export function RailSkin({
 
         {view.groups.map((group) => {
           const isCollapsed = collapsed.has(group.key);
+          const isOlderOpen = olderOpen.has(group.key);
           return (
             <section key={group.key} className={styles.section}>
               <div className={styles.groupHeaderRow}>
@@ -243,7 +264,37 @@ export function RailSkin({
                 </button>
               </div>
               {isCollapsed ? null : (
-                <div className={styles.groupSessions}>{group.sessions.map(renderSession)}</div>
+                <div className={styles.groupSessions}>
+                  {group.sessions.map(renderSession)}
+                  {group.older.length > 0 ? (
+                    <div className={styles.older}>
+                      <button
+                        type="button"
+                        className={styles.olderRow}
+                        onClick={() => toggleOlder(group.key)}
+                        title={
+                          hideInactiveAfterDays > 0
+                            ? `No activity for over ${hideInactiveAfterDays} ${hideInactiveAfterDays === 1 ? "day" : "days"}`
+                            : undefined
+                        }
+                        aria-expanded={isOlderOpen}
+                      >
+                        <span
+                          className={
+                            isOlderOpen
+                              ? `${styles.olderChevron} ${styles.olderChevronOpen}`
+                              : styles.olderChevron
+                          }
+                        >
+                          <ChevronIcon size={11} />
+                        </span>
+                        <span className={styles.olderLabel}>Older</span>
+                        <span className={styles.olderCount}>{group.older.length}</span>
+                      </button>
+                      {isOlderOpen ? group.older.map(renderSession) : null}
+                    </div>
+                  ) : null}
+                </div>
               )}
             </section>
           );

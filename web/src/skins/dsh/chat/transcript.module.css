@@ -575,3 +575,249 @@
   padding: 1px 6px;
   font-size: var(--text-xs);
 }
+
+/* ---------------------------------------------------------------------------
+ * Tool blocks — one shell for every call: badge, what it was for, duration,
+ * outcome; the body is shaped by the tool (code, diff, todo, output).
+ * ------------------------------------------------------------------------- */
+
+.toolBadge {
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 0 5px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+.toolTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolMeta {
+  flex: none;
+  color: var(--fg-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.toolBlockStatus {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.toolBlockStatus[data-tone="ok"] {
+  color: var(--success);
+}
+
+.toolBlockStatus[data-tone="error"] {
+  color: var(--error);
+}
+
+.toolBlockStatus[data-tone="running"] {
+  color: var(--warning);
+}
+
+.toolBlockStatus[data-tone="muted"] {
+  font-family: var(--font-mono);
+}
+
+.toolSection {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.toolCode {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--code-bg);
+  padding: 6px 8px;
+  color: var(--code-fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.toolFold {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  padding: 4px 8px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+}
+
+.toolFold:hover {
+  background: var(--hover);
+}
+
+.toolDiff {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--tool-bg);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.toolDiffRow {
+  display: flex;
+  min-width: max-content;
+}
+
+.toolDiffLineNo {
+  flex: none;
+  width: 44px;
+  padding-right: var(--space-2);
+  color: var(--fg-subtle);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+.toolDiffMark {
+  flex: none;
+  width: 12px;
+  color: var(--fg-subtle);
+  user-select: none;
+}
+
+.toolDiffText {
+  flex: 1;
+  padding-right: 10px;
+  color: var(--muted);
+  white-space: pre;
+}
+
+/* Variants ride on `data-kind` so the shell needs no per-line class map. */
+.toolDiffRow[data-kind="add"] {
+  background: var(--diff-add-bg);
+}
+
+.toolDiffRow[data-kind="add"] .toolDiffLineNo,
+.toolDiffRow[data-kind="add"] .toolDiffMark {
+  color: var(--diff-add-fg);
+}
+
+.toolDiffRow[data-kind="add"] .toolDiffText {
+  color: color-mix(in srgb, var(--diff-add-fg) 72%, var(--fg));
+}
+
+.toolDiffRow[data-kind="remove"] {
+  background: var(--diff-del-bg);
+}
+
+.toolDiffRow[data-kind="remove"] .toolDiffLineNo,
+.toolDiffRow[data-kind="remove"] .toolDiffMark {
+  color: var(--diff-del-fg);
+}
+
+.toolDiffRow[data-kind="remove"] .toolDiffText {
+  color: color-mix(in srgb, var(--diff-del-fg) 72%, var(--fg));
+}
+
+.toolDiffEmphasis {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--diff-add-fg) 26%, transparent);
+  padding: 0 1px;
+  color: var(--fg);
+}
+
+.toolDiffRow[data-kind="remove"] .toolDiffEmphasis {
+  background: color-mix(in srgb, var(--diff-del-fg) 26%, transparent);
+}
+
+.toolDiffGap {
+  padding-left: 44px;
+  color: var(--fg-subtle);
+  user-select: none;
+}
+
+.toolTodo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--tool-bg);
+  padding: 6px 8px;
+}
+
+.toolTodoPhase {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolTodoPhaseName {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.toolTodoCount {
+  margin-left: auto;
+  color: var(--fg-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+}
+
+.toolTodoTask {
+  display: flex;
+  gap: 6px;
+  padding-left: 10px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.toolTodoBox {
+  flex: none;
+  color: var(--fg-subtle);
+  font-family: var(--font-mono);
+}
+
+.toolTodoTask[data-status="completed"] {
+  color: var(--fg-subtle);
+  text-decoration: line-through;
+}
+
+.toolTodoTask[data-status="completed"] .toolTodoBox {
+  color: var(--success);
+  text-decoration: none;
+}
+
+.toolTodoTask[data-status="in_progress"] {
+  color: var(--fg);
+}
+
+.toolTodoTask[data-status="in_progress"] .toolTodoBox {
+  color: var(--accent);
+}

@@ -109,6 +109,80 @@ export const subagentTranscriptPageSchema = z.looseObject({
   totalBytes: z.number().optional(),
 });
 
+/** Settled per-subagent telemetry from the parent's `task` toolResult. */
+export const subagentResultSchema = z.looseObject({
+  exitCode: z.number().optional(),
+  truncated: z.boolean().optional(),
+  cost: z.number().optional(),
+  structuredOutput: z
+    .looseObject({
+      source: z.string().optional(),
+      mode: z.string().optional(),
+      status: z.string().optional(),
+      error: z.string().optional(),
+    })
+    .optional(),
+  error: z.string().optional(),
+  aborted: z.boolean().optional(),
+  abortReason: z.string().optional(),
+  outputPath: z.string().optional(),
+  patchPath: z.string().optional(),
+  branchName: z.string().optional(),
+});
+
+/**
+ * One subagent row of a session's on-disk roster (`SubagentHistoryEntry` in
+ * `lib/subagent-types.ts`), recovered from the parent file's `task` results.
+ * Every telemetry field is optional: they arrive per omp version.
+ */
+export const subagentRosterEntrySchema = z.looseObject({
+  id: z.string(),
+  agent: z.string(),
+  agentSource: z.enum(["bundled", "user", "project"]).optional(),
+  status: z.enum(["started", "completed", "failed", "aborted"]),
+  task: z.string().optional(),
+  assignment: z.string().optional(),
+  description: z.string().optional(),
+  index: z.number(),
+  parentToolCallId: z.string().optional(),
+  batchSeq: z.number().optional(),
+  sessionFile: z.string().optional(),
+  transcriptAvailable: z.boolean(),
+  detached: z.boolean().optional(),
+  lastIntent: z.string().optional(),
+  toolCount: z.number().optional(),
+  requests: z.number().optional(),
+  tokens: z.number().optional(),
+  contextTokens: z.number().optional(),
+  contextWindow: z.number().optional(),
+  cost: z.number().optional(),
+  durationMs: z.number().optional(),
+  modelOverride: z.union([z.string(), z.array(z.string())]).optional(),
+  modelRole: z.string().optional(),
+  resolvedModel: z.string().optional(),
+  resolvedModelIsFallback: z.boolean().optional(),
+  retryFailure: z.looseObject({ attempt: z.number(), errorMessage: z.string() }).optional(),
+  result: subagentResultSchema.optional(),
+});
+
+/** On-disk roster of one session's subagents. */
+export const subagentRosterResponseSchema = z.looseObject({
+  subagents: z.array(subagentRosterEntrySchema),
+});
+
+/** Transcript page (`fromByte`) or completion artifact (`mode=completion`). */
+export const subagentTranscriptResponseSchema = z.looseObject({
+  sessionFile: z.string(),
+  fromByte: z.number().optional(),
+  nextByte: z.number().optional(),
+  reset: z.boolean().optional(),
+  messages: z.array(z.unknown()).optional(),
+  completion: z.string().nullable().optional(),
+  truncated: z.boolean().optional(),
+  error: z.string().optional(),
+  totalBytes: z.number().optional(),
+});
+
 export const pluginResourceCountsSchema = z.looseObject({
   extensions: z.number(),
   skills: z.number(),

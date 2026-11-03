@@ -49,6 +49,10 @@
 
 .tabs {
   display: flex;
+  /* `overflow` below zeroes this item's automatic minimum size, so without
+   * `flex: none` a body taller than the sheet shrinks the tab row and paints
+   * its content over the labels. Only `.body` may give up height. */
+  flex: none;
   flex-wrap: wrap;
   gap: 2px;
   padding: 6px 8px;

@@ -1,7 +1,8 @@
 /**
  * Pure derivation for a session rail: project grouping, recency order, search
- * matching, the running filter, and relative time labels. No React and no
- * skin imports, so any rail presentation can consume the same view.
+ * matching, the running filter, the inactivity split into a group's `older`
+ * rows, and relative time labels. No React and no skin imports, so any rail
+ * presentation can consume the same view.
  */
 
 import { basename, comparablePath } from "@/api/paths";
@@ -20,7 +21,13 @@ export interface RailProjectGroup {
   key: string;
   path: string;
   label: string;
+  /** Conversations still considered active, newest first. */
   sessions: RailSessionItem[];
+  /**
+   * Conversations quiet for longer than the threshold, folded into the group's
+   * collapsed `Older` sub-group. Empty when the setting is off.
+   */
+  older: RailSessionItem[];
 }
 
 export interface RailViewInput {
@@ -29,6 +36,13 @@ export interface RailViewInput {
   running: ReadonlySet<string>;
   query?: string;
   runningOnly?: boolean;
+  /**
+   * Days of silence after which a conversation moves to its group's `Older`
+   * sub-group; `0`/absent keeps everything listed.
+   */
+  inactiveAfterDays?: number;
+  /** The conversation open in the chat column, which never counts as old. */
+  selectedId?: string | null;
   /** Injected clock for stable labels and tests. */
   now?: number;
 }
@@ -110,6 +124,26 @@ export function compareSessions(left: SessionSummary, right: SessionSummary): nu
   return delta !== 0 ? delta : left.id.localeCompare(right.id);
 }
 
+/**
+ * Whether a conversation has gone quiet long enough to leave the main list.
+ * Work in progress always wins over age: a running session and the session open
+ * in the chat column stay visible, and an undatable one is never hidden. A
+ * search is an explicit request to see everything, so it disables the split.
+ */
+function isStale(
+  session: SessionSummary,
+  input: RailViewInput,
+  needle: string,
+  now: number,
+): boolean {
+  const days = input.inactiveAfterDays ?? 0;
+  if (days <= 0 || needle) return false;
+  if (input.running.has(session.id)) return false;
+  if (session.id === input.selectedId) return false;
+  const timestamp = sessionTimestamp(session);
+  return timestamp > 0 && timestamp <= now - days * DAY;
+}
+
 function compareGroups(left: GroupDraft, right: GroupDraft): number {
   if (left.pinOrder !== right.pinOrder) return left.pinOrder - right.pinOrder;
   if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
@@ -176,13 +210,14 @@ export function buildRailView(input: RailViewInput): RailView {
 
   const groups: RailProjectGroup[] = [];
   for (const group of ordered) {
-    const sessions = group.sessions
+    const visible = group.sessions
       .filter((session) => matchesSession(session, needle))
-      .filter((session) => !runningOnly || input.running.has(session.id))
-      .map((session) => toItem(session, now, input.running));
+      .filter((session) => !runningOnly || input.running.has(session.id));
+    const older = visible.filter((session) => isStale(session, input, needle, now));
+    const fresh = visible.filter((session) => !older.includes(session));
 
-    if (runningOnly && sessions.length === 0) continue;
-    if (needle && sessions.length === 0) {
+    if (runningOnly && fresh.length === 0) continue;
+    if (needle && fresh.length === 0 && older.length === 0) {
       const haystack = `${group.label}\n${group.path}`.toLowerCase();
       if (!haystack.includes(needle)) continue;
     }
@@ -191,7 +226,8 @@ export function buildRailView(input: RailViewInput): RailView {
       key: group.key,
       path: group.path,
       label: group.label,
-      sessions,
+      sessions: fresh.map((session) => toItem(session, now, input.running)),
+      older: older.map((session) => toItem(session, now, input.running)),
     });
   }
 

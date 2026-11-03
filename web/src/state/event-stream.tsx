@@ -5,6 +5,8 @@ import { fetchSessionSnapshot } from "@/api/agent";
 import { applyExtensionFrame } from "./extension-store";
 import { applyLspDiagnosticsFrame } from "./lsp-store";
 import { applySnapshotFrame, getSessionSnapshot, isSnapshotFrame } from "./session-store";
+import { parseSubagentsFrame } from "@/api/subagents";
+import { applySubagentsFrame, setSubagentsStreamError } from "./subagents-store";
 
 const EventStreamContext = createContext<EventStreamClient | null>(null);
 
@@ -29,6 +31,7 @@ function channelKey(channel: Channel): string {
   switch (channel.kind) {
     case "running": return "running";
     case "session": return `session:${channel.sessionId}`;
+    case "subagents": return `subagents:${channel.sessionId}`;
     case "workspace": return `workspace:${channel.root}`;
     case "lsp": return `lsp:${channel.root}`;
     case "file": return `file:${channel.path}:${channel.sessionId ?? ""}`;
@@ -163,6 +166,28 @@ export function useSessionReconcile(sessionId: string | null, revision = 0): voi
       window.removeEventListener("focus", refresh);
     };
   }, [sessionId, revision]);
+}
+
+/**
+ * Subscribe to the session's subagent roster.
+ *
+ * Mounted by the chat column so the running strip and the agents view share
+ * one subscription; the frames only touch the roster store, never React state
+ * here, so a session with busy subagents does not repaint the shell.
+ */
+export function useSubagentsStream(sessionId: string | null, revision = 0): void {
+  useChannel(
+    sessionId ? { kind: "subagents", sessionId } : null,
+    (frame) => {
+      if (!sessionId) return;
+      const parsed = parseSubagentsFrame(frame);
+      if (parsed) applySubagentsFrame(sessionId, parsed);
+    },
+    (message) => {
+      if (sessionId) setSubagentsStreamError(sessionId, message);
+    },
+    revision,
+  );
 }
 
 export function useWorkspaceEvents(roots: readonly string[]): void {

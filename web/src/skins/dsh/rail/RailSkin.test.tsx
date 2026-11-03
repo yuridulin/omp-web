@@ -29,6 +29,7 @@ function renderRail(overrides: Partial<Parameters<typeof RailSkin>[0]> = {}) {
     draftId: null,
     running: new Set(),
     unseen: new Set(),
+    hideInactiveAfterDays: 0,
     loading: false,
     error: null,
     onSelect: () => {},
@@ -155,5 +156,44 @@ describe("rail archive actions", () => {
 
     expect(screen.queryByRole("button", { name: /archived sessions/i })).toBeNull();
     expect(screen.queryByText("Archived")).toBeNull();
+  });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function quietSession(id: string, ageDays: number): SessionSummary {
+  const stamp = new Date(Date.now() - ageDays * DAY_MS).toISOString();
+  return {
+    id,
+    path: `/sessions/${id}.jsonl`,
+    cwd: "/projects/games",
+    projectRoot: "/projects/games",
+    created: stamp,
+    modified: stamp,
+    messageCount: 1,
+    firstMessage: "",
+    name: id,
+  } as unknown as SessionSummary;
+}
+
+describe("rail older conversations", () => {
+  it("folds a quiet conversation into a collapsed Older row and opens it on click", () => {
+    renderRail({ sessions: [quietSession("quiet", 30)], hideInactiveAfterDays: 7 });
+
+    expect(screen.queryByText("quiet")).toBeNull();
+    const older = screen.getByRole("button", { name: /Older/ });
+    expect(older.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(older);
+
+    expect(older.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("quiet")).toBeTruthy();
+  });
+
+  it("lists everything when the threshold is never", () => {
+    renderRail({ sessions: [quietSession("quiet", 30)], hideInactiveAfterDays: 0 });
+
+    expect(screen.getByText("quiet")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Older/ })).toBeNull();
   });
 });

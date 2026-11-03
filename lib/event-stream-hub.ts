@@ -6,6 +6,11 @@ import { filePathApiSegments } from "./file-paths";
 import { attachNotificationClient } from "./notification-hub";
 import { getExitedRpcSessions, getRpcSession, getRunningRpcSessions, subscribeHostToolCalls, subscribeRunningSessions } from "./rpc-manager";
 import { snapshotFrame } from "./session-authority";
+import { resolveSessionPath } from "./session-reader";
+import { extractSubagentHistory } from "./subagent-history";
+import { historyToRosterInfo } from "./subagent-types";
+import { SESSION_NOT_FOUND } from "./api-utils";
+import { subagentWireInfo } from "../core/subagents";
 import { subscribeSessionFileChanges } from "./session-watcher";
 import { watchWorkspace } from "./workspace-watcher";
 import { subscribeLsp } from "./lsp/manager";
@@ -243,6 +248,8 @@ async function openChannel(channel: EventStreamChannel, handle: SubscriptionHand
       return openNotificationsChannel(channel.clientId, handle);
     case "session":
       return openSessionChannel(channel.sessionId, handle);
+    case "subagents":
+      return openSubagentsChannel(channel.sessionId, handle);
     case "workspace":
       return openWorkspaceChannel(channel.root, handle);
     case "lsp":
@@ -375,6 +382,35 @@ async function openSessionChannel(sessionId: string, handle: SubscriptionHandle)
   const initial = authority.snapshot;
   lastRevision = initial.session.historyRevision;
   handle.send(snapshotFrame(initial, false));
+  return SUBSCRIBED;
+}
+
+// Subagent roster of one session: live when a wrapper is attached, otherwise
+// the on-disk roster recovered from the parent file (reload, closed session).
+async function openSubagentsChannel(sessionId: string, handle: SubscriptionHandle): Promise<SubscribeResult> {
+  const existing = getRpcSession(sessionId);
+  const session = existing?.isAlive() ? existing : undefined;
+  const authority = session?.authority;
+  if (authority) {
+    handle.open();
+    // Seed before the first frame so the roster already carries the on-disk
+    // launch order and every agent that finished while nobody watched.
+    await authority.seedSubagents();
+    if (!handle.active) return SUBSCRIBED;
+    handle.send({ type: "subagents", ...authority.subagents });
+    handle.setDetach(
+      authority.subscribeSubagents((snapshot) => handle.send({ type: "subagents", ...snapshot })),
+    );
+    return SUBSCRIBED;
+  }
+  const filePath = session?.sessionFile || (await resolveSessionPath(sessionId));
+  if (!filePath) {
+    return { ok: false, status: 404, error: SESSION_NOT_FOUND.error, code: SESSION_NOT_FOUND.code };
+  }
+  const roster = extractSubagentHistory(filePath).map(historyToRosterInfo).map(subagentWireInfo);
+  handle.open();
+  if (!handle.active) return SUBSCRIBED;
+  handle.send({ type: "subagents", revision: 1, live: false, roster, activity: {}, transcriptVersions: {} });
   return SUBSCRIBED;
 }
 

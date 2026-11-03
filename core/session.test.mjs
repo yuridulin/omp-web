@@ -213,7 +213,7 @@ test("message entries without a message object are skipped, not fatal", () => {
   assert.equal(context.messages[0].role, "user");
 });
 
-test("task toolResults keep size-bounded details; other results keep only patch/diff", () => {
+test("task toolResults keep size-bounded details; other results keep only patch/diff/path", () => {
   const entries = [
     {
       type: "message",
@@ -239,7 +239,7 @@ test("task toolResults keep size-bounded details; other results keep only patch/
       id: "t2",
       parentId: "t1",
       timestamp: "2026-01-01T00:00:00.000Z",
-      message: { role: "toolResult", toolCallId: "tc2", toolName: "edit", content: [], details: { huge: "x".repeat(10000), patch: "the patch" } },
+      message: { role: "toolResult", toolCallId: "tc2", toolName: "edit", content: [], details: { huge: "x".repeat(10000), patch: "the patch", diff: "-1|a\n+1|b", path: "src/a.ts", firstChangedLine: 1 } },
     },
   ];
   const context = buildSessionContext(entries);
@@ -252,7 +252,11 @@ test("task toolResults keep size-bounded details; other results keep only patch/
   assert.equal("message" in taskDetails.async, false);
   assert.ok(taskDetails.results[0].resolvedModel.length <= 241);
   assert.ok(taskDetails.results[0].outputPath.length <= 241);
-  assert.deepEqual(context.messages.find((message) => message.toolCallId === "tc2").details, { patch: "the patch" });
+  assert.deepEqual(context.messages.find((message) => message.toolCallId === "tc2").details, {
+    patch: "the patch",
+    diff: "-1|a\n+1|b",
+    path: "src/a.ts",
+  });
 });
 
 test("hub send/jobs results keep bounded roster details; other ops are stripped", () => {

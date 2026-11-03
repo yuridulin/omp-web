@@ -172,7 +172,8 @@ describe("MessageView tool calls", () => {
     expect(screen.getByText("a.ts")).toBeTruthy();
     expect(screen.queryByText("done")).toBeNull();
     expect(screen.getByText("file body")).toBeTruthy();
-    expect(container.textContent).toContain('"path": "a.ts"');
+    // The block describes the call; the raw arguments JSON is gone.
+    expect(container.textContent).not.toContain('"path"');
     expect(container.querySelector('[data-pending="false"]')).not.toBeNull();
   });
 
@@ -292,8 +293,8 @@ describe("MessageView tool calls", () => {
     expect(container.querySelectorAll('[data-error="true"]').length).toBeGreaterThan(0);
   });
 
-  it("shows the command name instead of the raw command", () => {
-    render(
+  it("shows the command it ran instead of a JSON dump of the arguments", () => {
+    const { container } = render(
       <TranscriptRow
         message={assistant([
           {
@@ -307,7 +308,8 @@ describe("MessageView tool calls", () => {
     );
 
     expect(screen.getByText("Checking docker availability")).toBeTruthy();
-    expect(screen.queryByText("docker --version")).toBeNull();
+    expect(screen.getByText("docker --version")).toBeTruthy();
+    expect(container.textContent).not.toContain('"command"');
   });
 });
 

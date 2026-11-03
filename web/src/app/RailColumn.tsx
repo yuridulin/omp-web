@@ -7,6 +7,8 @@ import { archiveProject, registerProject } from "@/api/workspace";
 import { useProjects } from "@/features/projects/use-projects";
 import { useSessions } from "@/features/sessions/use-sessions";
 import { useUnseenSessions } from "@/features/sessions/use-unseen-sessions";
+import { useWebSettings } from "@/features/system/use-system-config";
+import { DEFAULT_INACTIVE_SESSION_DAYS } from "@/api/system-config";
 import { getLayout, updateLayout } from "@/layout/layout-store";
 import { ResizeHandle } from "@/layout/ResizeHandle";
 import { useLayoutField } from "@/layout/use-layout";
@@ -44,6 +46,7 @@ export function RailColumn({
   const width = useLayoutField("railWidth");
   const sessions = useSessions();
   const projects = useProjects();
+  const webSettings = useWebSettings();
   const [addError, setAddError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const adding = useRef(false);
@@ -138,6 +141,7 @@ export function RailColumn({
           draftId={draft?.id ?? null}
           running={running}
           unseen={unseen}
+          hideInactiveAfterDays={webSettings.data?.hideInactiveSessionsAfterDays ?? DEFAULT_INACTIVE_SESSION_DAYS}
           loading={sessions.isLoading}
           error={actionError ?? addError ?? (sessions.isError ? sessions.error.message : null)}
           onSelect={(sessionId) => {

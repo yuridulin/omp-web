@@ -21,6 +21,22 @@ type WebSettingsResponse = NonNullable<
 >;
 export type WebSettings = WebSettingsResponse;
 
+/** The inactivity thresholds the rail offers; `0` keeps every conversation listed. */
+export const INACTIVE_SESSION_DAY_CHOICES = [0, 1, 3, 7, 14] as const;
+
+/** Days of silence before a conversation folds into its group's `Older` rows. */
+export const DEFAULT_INACTIVE_SESSION_DAYS = 7;
+
+/**
+ * Total parse of the threshold: only an offered value survives, so a server
+ * value this UI cannot render falls back to the default instead of silently
+ * hiding conversations for an unexpected span.
+ */
+export function parseInactiveSessionDays(value: unknown): number {
+  const choices: readonly unknown[] = INACTIVE_SESSION_DAY_CHOICES;
+  return choices.includes(value) ? (value as number) : DEFAULT_INACTIVE_SESSION_DAYS;
+}
+
 type WebSettingsPutBody = NonNullable<
   paths["/api/system/web-settings"]["put"]["requestBody"]
 >["content"]["application/json"];
@@ -123,6 +139,7 @@ export function parseWebSettings(value: unknown): WebSettings {
       enabled: lsp.enabled !== false,
       servers: parseLspServers(lsp.servers),
     },
+    hideInactiveSessionsAfterDays: parseInactiveSessionDays(source.hideInactiveSessionsAfterDays),
   };
 }
 

@@ -8,6 +8,7 @@ import { ExtensionDialog } from "@/features/chat/ExtensionDialog";
 import { MessageView } from "@/features/chat/MessageView";
 import { ModelPicker } from "@/features/chat/ModelPicker";
 import { QueuePanel } from "@/features/chat/QueuePanel";
+import { RunningAgentsStrip } from "@/features/chat/RunningAgentsStrip";
 import { composerUsageStats, formatTokens } from "@/features/chat/composer-stats";
 import { CacheIcon, StepsIcon, TokensIcon, TurnsIcon } from "@/features/chat/icons";
 import { hasVisibleLiveBody } from "@/features/chat/transcript";
@@ -221,6 +222,12 @@ export function ChatSkin({
             onRemove={onRemoveQueued}
             onPromote={onPromoteQueued}
           />
+          {selected ? (
+            <RunningAgentsStrip
+              sessionId={selected}
+              classes={dshChatClasses.runningAgents}
+            />
+          ) : null}
           <ComposerDock
             sessionId={selected ?? NEW_SESSION_DRAFT_ID}
             classes={dshChatClasses.composer}

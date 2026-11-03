@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, JSX, ReactNode } from "react";
 import {
   formatAgentEnv,
+  INACTIVE_SESSION_DAY_CHOICES,
   parseAgentEnv,
   readNativeBoolean,
   readNativeString,
@@ -64,6 +65,12 @@ const EXTENSION_APPROVAL_OPTIONS: readonly Option[] = [
   { value: "allow", label: "allow" },
   { value: "prompt", label: "prompt" },
 ];
+
+/** Mirrors the thresholds `buildRailView` accepts; `0` is "never hide". */
+const INACTIVE_DAYS_OPTIONS: readonly Option[] = INACTIVE_SESSION_DAY_CHOICES.map((days) => ({
+  value: String(days),
+  label: days === 0 ? "never" : days === 1 ? "1 day" : `${days} days`,
+}));
 
 /** Validate the JSON textarea before it reaches the server's stricter parser. */
 function parseLspServersText(
@@ -224,7 +231,11 @@ export function SettingsForm(): JSX.Element {
     }
   };
 
-  const updateWeb = (patch: Partial<Pick<WebSettings, "autoResumeSessions" | "agentToolsEnabled" | "lsp">>) => {
+  const updateWeb = (
+    patch: Partial<
+      Pick<WebSettings, "autoResumeSessions" | "agentToolsEnabled" | "lsp" | "hideInactiveSessionsAfterDays">
+    >,
+  ) => {
     setWebDraft((current): WebSettings | null => (current ? { ...current, ...patch } : current));
     setWebFeedback(null);
     setWebError(null);
@@ -251,6 +262,7 @@ export function SettingsForm(): JSX.Element {
         agentToolsEnabled: webDraft.agentToolsEnabled,
         agentEnv: parsed.values,
         lsp: { enabled: webDraft.lsp.enabled, servers: lsp.servers },
+        hideInactiveSessionsAfterDays: webDraft.hideInactiveSessionsAfterDays,
       });
       setWebDraft(saved);
       setEnvText(formatAgentEnv(saved.agentEnv));
@@ -450,6 +462,21 @@ export function SettingsForm(): JSX.Element {
                   disabled={webBusy}
                   onChange={(checked) => updateWeb({ agentToolsEnabled: checked })}
                 />
+                <SelectField
+                  label="Hide inactive conversations after"
+                  value={String(webDraft.hideInactiveSessionsAfterDays)}
+                  options={INACTIVE_DAYS_OPTIONS}
+                  allowUnset={false}
+                  disabled={webBusy}
+                  onChange={(value) =>
+                    updateWeb({ hideInactiveSessionsAfterDays: Number(value) })
+                  }
+                />
+                <p className={styles.hint}>
+                  A conversation quiet for longer moves to its project's collapsed <code>Older</code>
+                  {" "}row. The session open in the chat column and any running agent stay listed; nothing
+                  is archived or deleted.
+                </p>
               </Section>
 
               <Section title="Language servers">

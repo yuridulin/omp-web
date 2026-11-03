@@ -240,14 +240,44 @@ export function normalizeToolCalls(message: AgentMessage): AgentMessage {
 const TASK_DETAIL_MAX_TEXT = 240;
 const TASK_DETAIL_MAX_ROWS = 50;
 
+/** Scalars a tool block prints in its header; too small to bloat history. */
+const DETAIL_NUMBER_KEYS = ["exitCode", "wallTimeMs", "totalLines"] as const;
+
+const TODO_PHASE_MAX_ROWS = 20;
+const TODO_TASK_MAX_ROWS = 50;
+
 function truncateTaskDetailText(value: string): string {
   if (value.length <= TASK_DETAIL_MAX_TEXT) return value;
   // Cut by code point so a boundary can never split a surrogate pair.
   return `${[...value].slice(0, TASK_DETAIL_MAX_TEXT).join("")}…`;
 }
 
-function taskResultUsageCost(usage: unknown): number | undefined {
-  if (!isRecord(usage) || !isRecord(usage.cost)) return undefined;
+/**
+ * The todo block renders this tree, so the phases survive the strip — bounded
+ * per phase and per task the same way the task rows are.
+ */
+function keepTodoPhases(
+  value: unknown,
+): Array<{ name: string; tasks: Array<{ content: string; status: string }> }> | null {
+  if (!Array.isArray(value)) return null;
+  const phases: Array<{ name: string; tasks: Array<{ content: string; status: string }> }> = [];
+  for (const rawPhase of value.slice(0, TODO_PHASE_MAX_ROWS)) {
+    if (!isRecord(rawPhase)) continue;
+    const tasks: Array<{ content: string; status: string }> = [];
+    const rawTasks = Array.isArray(rawPhase.tasks) ? rawPhase.tasks : [];
+    for (const rawTask of rawTasks.slice(0, TODO_TASK_MAX_ROWS)) {
+      if (!isRecord(rawTask)) continue;
+      const content = asString(rawTask.content);
+      const status = asString(rawTask.status);
+      if (content === undefined || status === undefined) continue;
+      tasks.push({ content: truncateTaskDetailText(content), status });
+    }
+    phases.push({ name: truncateTaskDetailText(asString(rawPhase.name) ?? ""), tasks });
+  }
+  return phases.length > 0 ? phases : null;
+}
+
+function taskResultUsageCost(usage: unknown): number | undefined {  if (!isRecord(usage) || !isRecord(usage.cost)) return undefined;
   const total = asNumber(usage.cost.total);
   if (total !== undefined) return total;
   const input = asNumber(usage.cost.input);
@@ -415,9 +445,11 @@ function hubDetailTargets(value: unknown): string[] | undefined {
 
 /**
  * `details` is provider/tool-internal metadata that dominates history
- * payloads. The history UI reads `patch`/`diff`, the per-subagent summary on
- * `task`, and the hub job/receipt rows; everything else is dropped. On-disk
- * parsing keeps full details — only the display path narrows them.
+ * payloads. The history UI reads `patch`/`diff`, the edited file's `path`, a
+ * few scalars a tool block shows in its header (`exitCode`, `wallTimeMs`,
+ * `totalLines`), the todo phases behind the todo block, the per-subagent
+ * summary on `task`, and the hub job/receipt rows; everything else is dropped.
+ * On-disk parsing keeps full details — only the display path narrows them.
  */
 function stripToolResultDetails(message: AgentMessage): AgentMessage {
   if (message.role !== "toolResult" || message.details === undefined) return message;
@@ -426,6 +458,15 @@ function stripToolResultDetails(message: AgentMessage): AgentMessage {
     const kept: Record<string, unknown> = {};
     if (typeof details.patch === "string") kept.patch = details.patch;
     if (typeof details.diff === "string") kept.diff = details.diff;
+    if (typeof details.path === "string" && details.path !== "") kept.path = details.path;
+    for (const key of DETAIL_NUMBER_KEYS) {
+      const value = details[key];
+      if (typeof value === "number" && Number.isFinite(value)) kept[key] = value;
+    }
+    if (message.toolName === "todo") {
+      const phases = keepTodoPhases(details.phases);
+      if (phases !== null) kept.phases = phases;
+    }
     if (message.toolName === "task") {
       const taskDetails = keepTaskToolResultDetails(details);
       if (taskDetails) Object.assign(kept, taskDetails);

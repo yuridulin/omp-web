@@ -245,6 +245,103 @@ describe("buildRailView", () => {
     expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["alpha-run"]);
   });
 
+  it("folds quiet conversations into the group's older list", () => {
+    const view = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("fresh", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(120) }),
+        session("stale", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(8 * 24 * 60) }),
+        session("edge", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(7 * 24 * 60) }),
+      ],
+      running: new Set(),
+      inactiveAfterDays: 7,
+      now: NOW,
+    });
+
+    // Exactly seven days of silence already counts as old.
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["fresh"]);
+    expect(view.groups[0]?.older.map((item) => item.id)).toEqual(["edge", "stale"]);
+    expect(view.groups[0]?.older[0]?.time).toBe("1w");
+  });
+
+  it("keeps every conversation listed when the threshold is off", () => {
+    const view = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [session("ancient", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(400 * 24 * 60) })],
+      running: new Set(),
+      inactiveAfterDays: 0,
+      now: NOW,
+    });
+
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["ancient"]);
+    expect(view.groups[0]?.older).toEqual([]);
+  });
+
+  it("never hides a running conversation or the one open in the chat column", () => {
+    const old = minutesAgo(30 * 24 * 60);
+    const view = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("running-old", { projectRoot: "/work/alpha", lastMessageAt: old }),
+        session("selected-old", { projectRoot: "/work/alpha", lastMessageAt: old }),
+      ],
+      running: new Set(["running-old"]),
+      inactiveAfterDays: 3,
+      selectedId: "selected-old",
+      now: NOW,
+    });
+
+    // The running session keeps its group row instead of an Active section.
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["running-old", "selected-old"]);
+    expect(view.groups[0]?.older).toEqual([]);
+  });
+
+  it("reveals older conversations while searching", () => {
+    const view = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("stale", { projectRoot: "/work/alpha", name: "Old parser fix", lastMessageAt: minutesAgo(30 * 24 * 60) }),
+        session("fresh", { projectRoot: "/work/alpha", name: "Parser docs", lastMessageAt: minutesAgo(2) }),
+      ],
+      running: new Set(),
+      query: "parser",
+      inactiveAfterDays: 7,
+      now: NOW,
+    });
+
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["fresh", "stale"]);
+    expect(view.groups[0]?.older).toEqual([]);
+  });
+
+  it("keeps an undatable conversation visible and drops the running filter's older rows", () => {
+    const undatable = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("broken", { projectRoot: "/work/alpha", modified: "not a date", lastMessageAt: "not a date" }),
+      ],
+      running: new Set(),
+      inactiveAfterDays: 1,
+      now: NOW,
+    });
+    expect(undatable.groups[0]?.sessions.map((item) => item.id)).toEqual(["broken"]);
+    expect(undatable.groups[0]?.older).toEqual([]);
+
+    const runningOnly = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("live", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(1) }),
+        session("quiet", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(30 * 24 * 60) }),
+      ],
+      running: new Set(["live"]),
+      runningOnly: true,
+      inactiveAfterDays: 7,
+      now: NOW,
+    });
+    // The quiet one is filtered out; `live` keeps its row and is never stale.
+    expect(runningOnly.groups[0]?.sessions.map((item) => item.id)).toEqual(["live"]);
+    expect(runningOnly.groups[0]?.older).toEqual([]);
+  });
+
   it("applies search to running sessions in their groups", () => {
     const view = buildRailView({
       projects: [project("/work/alpha", { alias: "Alpha" })],

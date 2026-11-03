@@ -111,6 +111,16 @@ describe("settings parsing", () => {
     expect(parsed.agentToolsEnabled).toBe(true);
     expect(parsed.agentEnv).toEqual({ FOO: "bar" });
     expect((parsed as Record<string, unknown>).extra).toBe("kept");
+    // Missing or unoffered thresholds fall back to a week of silence.
+    expect(parsed.hideInactiveSessionsAfterDays).toBe(7);
+  });
+
+  it("keeps only an offered inactivity threshold", () => {
+    expect(parseWebSettings({ hideInactiveSessionsAfterDays: 3 }).hideInactiveSessionsAfterDays).toBe(3);
+    expect(parseWebSettings({ hideInactiveSessionsAfterDays: 0 }).hideInactiveSessionsAfterDays).toBe(0);
+    for (const value of ["7", 5, 2.5, null]) {
+      expect(parseWebSettings({ hideInactiveSessionsAfterDays: value }).hideInactiveSessionsAfterDays).toBe(7);
+    }
   });
 });
 

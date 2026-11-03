@@ -1,6 +1,7 @@
 import type {
   ComposerClasses,
   ExtensionDialogClasses,
+  RunningAgentsClasses,
   ModelPickerClasses,
   QueueClasses,
   TranscriptClasses,
@@ -25,3 +26,4 @@ export const testComposerClasses = classMap<ComposerClasses>();
 export const testQueueClasses = classMap<QueueClasses>();
 export const testModelPickerClasses = classMap<ModelPickerClasses>();
 export const testExtensionDialogClasses = classMap<ExtensionDialogClasses>();
+export const testRunningAgentsClasses = classMap<RunningAgentsClasses>();

@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { basename, comparablePath } from "@/api/paths";
 import { writeDragPayload } from "@/drag/payload";
+import { AgentsList, AgentsRunningCount } from "@/features/agents/AgentsList";
 import { EditorArea } from "@/features/workbench/EditorArea";
 import { FileTree } from "@/features/workbench/FileTree";
 import { ProblemsList } from "@/features/workbench/ProblemsList";
 import { ResizeHandle } from "@/layout/ResizeHandle";
 import type { FilesSlotProps } from "@/slots/files";
+import { dshChatClasses } from "../chat/classes";
 import { Tabs } from "./Tabs";
 import styles from "./files.module.css";
 
@@ -63,6 +65,10 @@ export function FilesSkin({
   const problemsCount = problems.reduce((total, document) => total + document.diagnostics.length, 0);
 
   const renderNavigator = () => {
+    // Agents need no workspace root: the roster belongs to the session.
+    if (view === "agents") {
+      return <AgentsList key={`agents:${sessionId}`} sessionId={sessionId} />;
+    }
     if (roots.length === 0) {
       return <p className={styles.treeStatus}>Select a session with a workspace.</p>;
     }
@@ -137,6 +143,14 @@ export function FilesSkin({
           >
             Problems
             {problemsCount > 0 ? <span className={styles.viewCount}>{problemsCount}</span> : null}
+          </button>
+          <button
+            className={view === "agents" ? styles.viewTabActive : styles.viewTab}
+            onClick={() => onSelectView("agents")}
+            title="Subagents of this session"
+          >
+            Agents
+            <AgentsRunningCount sessionId={sessionId} className={styles.viewCount} />
           </button>
         </div>
         <div className={styles.rootLabel} title={primaryRoot ?? undefined}>
@@ -226,6 +240,7 @@ export function FilesSkin({
             roots={roots}
             tabs={tabs}
             activeTabId={activeTabId}
+            transcriptClasses={dshChatClasses.transcript}
             onTabScroll={onTabScroll}
             {...(onInlinePrompt ? { onInlinePrompt } : {})}
           />

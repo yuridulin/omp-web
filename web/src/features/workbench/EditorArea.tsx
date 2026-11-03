@@ -3,6 +3,7 @@ import { scheduleIdle } from "@/state/schedule-idle";
 import { rootForPath } from "@/api/paths";
 import type { WorkbenchTab } from "@/layout/layout-store";
 import type { EditorSlotProps } from "@/slots/editor";
+import { SubagentView } from "@/features/agents/SubagentView";
 import { DiffView } from "./DiffView";
 import { FileView } from "./FileView";
 import styles from "./editor-area.module.css";
@@ -43,6 +44,7 @@ export function EditorArea({
   roots,
   tabs,
   activeTabId,
+  transcriptClasses,
   onTabScroll,
   onInlinePrompt,
 }: EditorSlotProps) {
@@ -68,6 +70,17 @@ export function EditorArea({
           {...(activeTab.scrollTop !== undefined ? { scrollTop: activeTab.scrollTop } : {})}
           {...(onInlinePrompt ? { onInlinePrompt } : {})}
           onScroll={(scrollTop) => onTabScroll(activeTab.id, scrollTop)}
+        />
+      );
+    }
+    if (activeTab.kind === "subagent") {
+      const subagentId = activeTab.subagentId ?? activeTab.path;
+      return (
+        <SubagentView
+          key={activeTab.id}
+          sessionId={sessionId}
+          subagentId={subagentId}
+          classes={transcriptClasses}
         />
       );
     }

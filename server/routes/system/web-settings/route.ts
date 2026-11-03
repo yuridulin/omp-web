@@ -3,7 +3,7 @@ import { json, readJson } from "@/server/http";
 import { errorEnvelope, routeContract } from "@/server/contract";
 import { syncInterruptibleSessions } from "@/lib/rpc-manager";
 import { parseAgentEnvText, sanitizeAgentEnvValues, type AgentEnvParseResult } from "@/lib/omp/agent-env";
-import { loadWebServerSettings, saveWebServerSettings, type WebServerSettings } from "@/lib/web-settings";
+import { loadWebServerSettings, saveWebServerSettings, INACTIVE_SESSION_DAY_CHOICES, type WebServerSettings } from "@/lib/web-settings";
 import { readLspSettings, validateLspSettings } from "@/lib/lsp/types";
 import { isRecord } from "@/lib/type-guards";
 
@@ -25,6 +25,7 @@ const webServerSettingsSchema = z.looseObject({
   agentToolsEnabled: z.boolean(),
   agentEnv: z.record(z.string(), z.string()),
   lsp: lspSettingsSchema,
+  hideInactiveSessionsAfterDays: z.number().int().min(0),
 });
 
 export const contract = routeContract({
@@ -40,6 +41,7 @@ export const contract = routeContract({
         agentToolsEnabled: z.boolean().optional(),
         agentEnv: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
         lsp: lspSettingsSchema.optional(),
+        hideInactiveSessionsAfterDays: z.number().int().min(0).optional(),
       }),
     },
     responses: {
@@ -76,6 +78,7 @@ export async function PUT(req: Request) {
     agentToolsEnabled?: unknown;
     agentEnv?: unknown;
     lsp?: unknown;
+    hideInactiveSessionsAfterDays?: unknown;
   };
   const patch: Partial<WebServerSettings> = {};
 
@@ -128,6 +131,23 @@ export async function PUT(req: Request) {
       );
     }
     patch.lsp = lsp;
+  }
+
+  if (payload.hideInactiveSessionsAfterDays !== undefined) {
+    // Only the thresholds the rail offers: an arbitrary span would hide
+    // conversations the settings UI cannot explain or undo.
+    const days = payload.hideInactiveSessionsAfterDays;
+    const choices: readonly unknown[] = INACTIVE_SESSION_DAY_CHOICES;
+    if (!choices.includes(days)) {
+      return json(
+        {
+          error: `hideInactiveSessionsAfterDays must be one of ${INACTIVE_SESSION_DAY_CHOICES.join(", ")}`,
+          code: "invalid_settings",
+        },
+        { status: 400 },
+      );
+    }
+    patch.hideInactiveSessionsAfterDays = days as number;
   }
 
   const settings = saveWebServerSettings(patch);

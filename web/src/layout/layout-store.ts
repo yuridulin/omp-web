@@ -2,7 +2,11 @@ import { basename, comparablePath, isAbsolutePath, isPathWithin, normalizeSlashe
 import { closeLspDocument } from "@/api/lsp";
 import { removeLspDiagnostics } from "@/state/lsp-store";
 
-export type WorkbenchView = "files" | "changes" | "problems";
+/**
+ * Navigator views: what the workbench's left pane lists. `agents` lists the
+ * session's subagents the same way `files` lists the tree.
+ */
+export type WorkbenchView = "files" | "changes" | "problems" | "agents";
 
 export interface DiffTabSource {
   kind: "working" | "commit";
@@ -15,12 +19,14 @@ export interface DiffTabSource {
 
 export interface WorkbenchTab {
   id: string;
-  kind: "file" | "diff" | "terminal";
+  kind: "file" | "diff" | "terminal" | "subagent";
   path: string;
   title: string;
   preview?: boolean;
   diff?: DiffTabSource;
   terminalCwd?: string;
+  /** Roster id of the subagent a `subagent` tab renders. */
+  subagentId?: string;
   scrollTop?: number;
   position?: { line: number; column: number };
 }
@@ -153,7 +159,10 @@ function isTab(value: unknown): value is WorkbenchTab {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   if (typeof record.id !== "string" || typeof record.path !== "string" || typeof record.title !== "string") return false;
-  if (record.kind !== "file" && record.kind !== "diff" && record.kind !== "terminal") return false;
+  if (record.kind !== "file" && record.kind !== "diff" && record.kind !== "terminal" && record.kind !== "subagent") return false;
+  if (record.kind === "subagent") {
+    return typeof record.subagentId === "string" && record.subagentId.length > 0;
+  }
   if (record.position !== undefined) {
     if (!record.position || typeof record.position !== "object" || Array.isArray(record.position)) return false;
     const position = record.position as Record<string, unknown>;
@@ -192,7 +201,7 @@ function sanitizeContext(value: unknown, fallbackRoot: string | null): Workbench
   if (roots.length === 0 && fallbackRoot) roots.push(fallbackRoot);
   return {
     roots,
-    view: record.view === "changes" || record.view === "problems" ? record.view : "files",
+    view: record.view === "changes" || record.view === "problems" || record.view === "agents" ? record.view : "files",
     expanded: Array.isArray(record.expanded)
       ? record.expanded.filter((path): path is string => typeof path === "string").slice(0, MAX_EXPANDED)
       : [],
@@ -382,6 +391,11 @@ export function terminalTabId(cwd: string): string {
   return `terminal:${normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized}`;
 }
 
+/** Tab id of one subagent's read-only view. */
+export function subagentTabId(subagentId: string): string {
+  return `subagent:${subagentId}`;
+}
+
 function shortRev(rev: string): string {
   if (rev === "WORKTREE") return "working";
   if (rev === "INDEX") return "index";
@@ -501,6 +515,27 @@ export function openTerminalTab(sessionId: string, cwd: string): void {
       path: cwd,
       title: basename(cwd) || cwd,
       terminalCwd: cwd,
+    };
+    return { ...context, tabs: [...context.tabs, tab].slice(-MAX_TABS), activeTabId: id };
+  });
+}
+
+/**
+ * Open (or focus) one subagent's read-only view.
+ *
+ * Symmetric with `openFileTab`: it only touches tabs. Revealing the workbench
+ * column is the caller's intent (`features/agents/open-agent.ts`).
+ */
+export function openSubagentTab(sessionId: string, subagentId: string, title: string): void {
+  const id = subagentTabId(subagentId);
+  updateWorkbenchContext(sessionId, (context) => {
+    if (context.tabs.some((tab) => tab.id === id)) return { ...context, activeTabId: id };
+    const tab: WorkbenchTab = {
+      id,
+      kind: "subagent",
+      path: subagentId,
+      title: title || subagentId,
+      subagentId,
     };
     return { ...context, tabs: [...context.tabs, tab].slice(-MAX_TABS), activeTabId: id };
   });

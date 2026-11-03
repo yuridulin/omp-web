@@ -9,6 +9,8 @@ export interface RailSlotProps {
   running: ReadonlySet<string>;
   /** Finished sessions with unseen messages; painted as a dot until opened. */
   unseen: ReadonlySet<string>;
+  /** Days of silence after which a conversation folds into its group's `Older` rows; `0` = never. */
+  hideInactiveAfterDays: number;
   loading: boolean;
   error: string | null;
   onSelect: (sessionId: string) => void;

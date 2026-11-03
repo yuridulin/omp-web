@@ -2,6 +2,8 @@ import type { JSX } from "react";
 import type { ChatMessage } from "@/api/session-types";
 import type { TranscriptClasses } from "./classes";
 import { MessageImage } from "./MessageImage";
+import { ToolBlockView } from "./ToolBlockView";
+import { toolBlock } from "./tool-block";
 import {
   joinClassNames,
   prettyJson,
@@ -90,6 +92,11 @@ export function ToolCallView({
   result = null,
   streaming = false,
 }: ToolCallViewProps): JSX.Element {
+  // Every settled call gets the block shell; the plain `<details>` below stays
+  // for a call that has nothing to describe yet (no result, no command).
+  const block = toolBlock(call, result);
+  if (block !== null) return <ToolBlockView block={block} classes={classes} />;
+
   const isError = result?.isError === true;
   const partial = result?.partial === true;
   const settled = result !== null && !partial;

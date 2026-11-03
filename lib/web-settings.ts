@@ -24,14 +24,37 @@ export interface WebServerSettings {
   agentEnv: Record<string, string>;
   /** Language-server configuration; read when a document opens, not live. */
   lsp: LspSettings;
+  /**
+   * Days of silence after which the rail folds a conversation into its
+   * project's collapsed `Older` sub-group; 0 keeps every conversation listed.
+   * Display-only: nothing on disk moves.
+   */
+  hideInactiveSessionsAfterDays: number;
 }
+
+/** The thresholds the rail offers, `0` meaning "never hide". */
+export const INACTIVE_SESSION_DAY_CHOICES = [0, 1, 3, 7, 14] as const;
+
+/** Default inactivity threshold: a week of silence. */
+export const DEFAULT_INACTIVE_SESSION_DAYS = 7;
 
 const DEFAULTS: WebServerSettings = {
   autoResumeSessions: false,
   agentToolsEnabled: false,
   agentEnv: {},
   lsp: DEFAULT_LSP_SETTINGS,
+  hideInactiveSessionsAfterDays: DEFAULT_INACTIVE_SESSION_DAYS,
 };
+
+/**
+ * Total parse of the threshold: an offered value survives, anything else (a
+ * string, a float, a number outside the set) falls back to the default rather
+ * than silently hiding conversations for an unexpected span.
+ */
+export function readInactiveSessionDays(value: unknown): number {
+  const choices: readonly unknown[] = INACTIVE_SESSION_DAY_CHOICES;
+  return choices.includes(value) ? (value as number) : DEFAULT_INACTIVE_SESSION_DAYS;
+}
 
 /** String-valued entries only — the allow-list lives in lib/omp/agent-env.ts. */
 function readAgentEnvRecord(value: unknown): Record<string, string> {
@@ -66,6 +89,7 @@ export function loadWebServerSettings(): WebServerSettings {
           agentToolsEnabled: raw.agentToolsEnabled === true,
           agentEnv: readAgentEnvRecord(raw.agentEnv),
           lsp: readLspSettings(raw.lsp),
+          hideInactiveSessionsAfterDays: readInactiveSessionDays(raw.hideInactiveSessionsAfterDays),
         };
       }
     }

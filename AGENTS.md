@@ -167,9 +167,29 @@ day-to-day repository rules.
   invents a global size, radius or colour. A skin may override token values on
   its own root, which is how it gets a different visual language without
   touching the other slots.
+- Icons in omp text: omp writes Nerd Font glyphs from the Private Use Area
+  into session titles and messages, so every stack that paints omp text ends
+  with the `"Nerd Symbols"` fallback family (`styles/fonts.css`, vendored in
+  `src/assets/fonts/` with its licence and subset recipe). It is a fallback,
+  never a typeface — after the real families, before the generic keyword. A
+  local stack that mirrors `--font-ui` (the rail's title, which fronts the
+  color-emoji families) has to list it too.
+- Tool blocks: every call renders as one block — chip, what it was for, quiet
+  facts, outcome, then a body shaped by the tool (`code`, `diff`, `todo`,
+  `output`). The model is `features/chat/tool-block.ts`, the view
+  `ToolBlockView.tsx`, and noisy tools (`read`, `grep`, `glob`) start folded.
+  Tool-result `details` are the source for the header — and that allowlist is
+  narrowed in **two** places, `core/session.ts` (live) and
+  `lib/session-reader.ts` (history): a field added to one and not the other
+  silently vanishes from history.
 - Layout state is client-only: `omp.layout.v1` for global widths/flags and
   `omp.workbench.v1.<sessionId>` for tabs, expanded directories, view and
   scroll. Server snapshots stay the authority for session content.
+- A side sheet (System, Notifications) splits fixed chrome from one scrolling
+  body: the sheet is a flex column, the title and tab row are `flex: none`, and
+  only the body gets `overflow: auto`. A chrome row that can shrink (a default
+  `flex-shrink: 1` plus `overflow` elsewhere) loses height to tall content and
+  paints it over its own labels.
 - Monaco and xterm are lazy-loaded; the chat shell must not pay their bundle
   cost on first paint.
 - Tests: Vitest + Testing Library; Playwright for flows when a flow exists.
