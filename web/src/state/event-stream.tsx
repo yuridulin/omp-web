@@ -4,7 +4,7 @@ import { EventStreamClient, type Channel, type FrameHandler } from "@/api/events
 import { fetchSessionSnapshot } from "@/api/agent";
 import { applyExtensionFrame } from "./extension-store";
 import { applyLspDiagnosticsFrame } from "./lsp-store";
-import { applySnapshotFrame, isSnapshotFrame } from "./session-store";
+import { applySnapshotFrame, getSessionSnapshot, isSnapshotFrame } from "./session-store";
 
 const EventStreamContext = createContext<EventStreamClient | null>(null);
 
@@ -122,13 +122,29 @@ export function useSessionReconcile(sessionId: string | null, revision = 0): voi
     let cancelled = false;
     const refresh = (): void => {
       void fetchSessionSnapshot(sessionId)
-        .then((snapshot) => {
-          if (cancelled || !snapshot) return;
+        .then(({ running, snapshot }) => {
+          if (cancelled) return;
+          if (snapshot) {
+            applySnapshotFrame(sessionId, {
+              type: "snapshot",
+              revision: snapshot.session.historyRevision,
+              history: false,
+              snapshot,
+            });
+            return;
+          }
+          // No live process backs the session, so a cached "running" run is
+          // stale (its end happened while the socket was down).
+          const previous = getSessionSnapshot(sessionId);
+          if (running || !previous || previous.session.run.status === "idle") return;
           applySnapshotFrame(sessionId, {
             type: "snapshot",
-            revision: snapshot.session.historyRevision,
+            revision: previous.session.historyRevision,
             history: false,
-            snapshot,
+            snapshot: {
+              ...previous,
+              session: { ...previous.session, run: { ...previous.session.run, status: "idle" } },
+            },
           });
         })
         .catch(() => {

@@ -95,18 +95,25 @@ export async function fetchLiveSessionState(sessionId: string): Promise<LiveSess
   return { model, thinkingLevel };
 }
 
-export async function fetchSessionSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+export interface ReconciledSnapshot {
+  /** Whether a live omp process backs the session. */
+  running: boolean;
+  /** The authority's snapshot; null when no process is alive. */
+  snapshot: SessionSnapshot | null;
+}
+
+export async function fetchSessionSnapshot(sessionId: string): Promise<ReconciledSnapshot> {
   const { data, error, response } = await api.GET("/api/agent/sessions/{id}/state", {
     params: { path: { id: sessionId }, query: { snapshot: "1" } },
   });
   if (error) throw new Error(errorInfo(error, response.status).message);
 
   const snapshot = data && isRecord(data.snapshot) ? data.snapshot : null;
-  if (!isSessionSnapshot(snapshot)) return null;
+  if (!isSessionSnapshot(snapshot)) return { running: data?.running === true, snapshot: null };
   // Defensive: a reconcile snapshot never carries the transcript, which is
   // read through the history window.
   const { messages: _messages, entryIds: _entryIds, ...session } = snapshot.session;
-  return { ...snapshot, session };
+  return { running: data?.running === true, snapshot: { ...snapshot, session } };
 }
 
 export async function createSession(input: NewSessionInput): Promise<string> {

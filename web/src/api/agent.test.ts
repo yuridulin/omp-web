@@ -169,8 +169,9 @@ describe("fetchSessionSnapshot", () => {
       }),
     );
 
-    const snapshot = await fetchSessionSnapshot("sess-1");
+    const { running, snapshot } = await fetchSessionSnapshot("sess-1");
 
+    expect(running).toBe(true);
     expect(snapshot?.session.run.status).toBe("idle");
     expect(snapshot?.session.historyRevision).toBe(7);
     expect(snapshot?.session).not.toHaveProperty("messages");
@@ -180,10 +181,13 @@ describe("fetchSessionSnapshot", () => {
     });
   });
 
-  it("returns null when the session has no live snapshot", async () => {
+  it("reports no live process and no snapshot for a saved session", async () => {
     apiMock.GET.mockResolvedValueOnce(ok({ running: false }));
 
-    await expect(fetchSessionSnapshot("sess-1")).resolves.toBeNull();
+    await expect(fetchSessionSnapshot("sess-1")).resolves.toEqual({
+      running: false,
+      snapshot: null,
+    });
   });
 });
 
