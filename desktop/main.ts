@@ -45,7 +45,7 @@ try {
     type: "error",
     title: "omp-web",
     message: "omp-web could not start",
-    detail: `${message}\n\nIf port ${process.env.OMP_WEB_PORT ?? 30178} is busy, quit the other instance or set OMP_WEB_PORT.`,
+    detail: `${message}\n\nIf port ${process.env.OMP_WEB_PORT ?? 6666} is busy, quit the other instance or set OMP_WEB_PORT.`,
   });
   Utils.quit(1);
 }

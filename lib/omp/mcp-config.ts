@@ -250,7 +250,7 @@ export function validateMcpServer(name: unknown, server: unknown): asserts serve
 }
 
 // Cross-process mutex for MCP config read-modify-write cycles. The dev server
-// (30178) and the installed production app (30177) can edit the same project's
+// (6666) and the installed production app (30177) can edit the same project's
 // mcp.json at the same time; without a lock the later rename would silently
 // overwrite the earlier mutation (add vs delete lost update). A lockfile with
 // exclusive create (`wx`) is atomic on every platform; the holder writes its

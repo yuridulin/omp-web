@@ -363,7 +363,7 @@ declare global {
 
 async function serverOptions(options: StartServerOptions): Promise<{ options: ServeOptions; routes: number }> {
   const host = options.host ?? process.env.OMP_WEB_HOST ?? "127.0.0.1";
-  const port = options.port ?? Number(process.env.OMP_WEB_PORT || process.env.PORT || 30178);
+  const port = options.port ?? Number(process.env.OMP_WEB_PORT || process.env.PORT || 6666);
   const staticRoot =
     options.staticRoot ?? process.env.OMP_WEB_STATIC_DIR ?? fileURLToPath(new URL("../web/dist", import.meta.url));
   const routes = manifestRoutes();

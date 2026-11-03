@@ -15,12 +15,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 666,
     strictPort: true,
     proxy: {
       // The Bun server owns HTTP and SSE; the UI never imports its code.
       "/api": {
-        target: process.env.OMP_WEB_API_TARGET ?? "http://127.0.0.1:30178",
+        target: process.env.OMP_WEB_API_TARGET ?? "http://127.0.0.1:6666",
         changeOrigin: false,
         ws: true,
       },

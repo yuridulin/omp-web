@@ -37,7 +37,7 @@ OMP_WEB_HOST=0.0.0.0 OMP_WEB_PORT=8080 bun start
 ```
 
 `bun run app` is the normal launch: it builds `web/dist` when it is missing,
-starts the Bun server on `http://127.0.0.1:30178/`, and opens the default
+starts the Bun server on `http://127.0.0.1:6666/`, and opens the default
 browser. On Windows, double-click `omp-web.cmd` (it runs the same command); for
 a desktop shortcut, point it at that file. Set `OMP_WEB_OPEN=0` to skip opening
 the browser and `OMP_WEB_PORT` to change the port.
@@ -51,7 +51,7 @@ bun run desktop:build     # installed-app artifacts in artifacts/ and build/
 
 Both go through Electrobun 2, which downloads its Hutch toolchain on first use
 into `~/.hutch` and projects the SDK into `.hutch/` (gitignored). The shell
-(`desktop/main.ts`) starts the same Bun server on `OMP_WEB_PORT` (30178) and
+(`desktop/main.ts`) starts the same Bun server on `OMP_WEB_PORT` (6666) and
 opens a native webview at its URL: one origin, so HTTP, SSE and the terminal
 WebSocket behave exactly as in the browser, and `bun run app` keeps working
 unchanged. The build is host-only (Windows here; mac/linux builds run on their
@@ -108,7 +108,7 @@ bun run routes:check
 
 bun run dev         # API under --hot + Vite in one process
 bun run dev:api     # API only, for a separately started Vite
-bun run web:dev     # Vite UI on http://127.0.0.1:5173 (proxies /api)
+bun run web:dev     # Vite UI on http://127.0.0.1:666 (proxies /api)
 bun run web:schema  # regenerate web/src/api/schema.d.ts from the contract
 bun run web:test
 bun run web:build

@@ -482,7 +482,7 @@ export async function commitSelfUpdate(attemptId: string, kind: Kind = "app"): P
   const descriptor = {
     launcherPath: join(resolve(packageDir), "bin", "omp-web.js"),
     hostname: process.env.OMP_WEB_HOSTNAME ?? process.env.HOSTNAME ?? "127.0.0.1",
-    port: Number(process.env.OMP_WEB_PORT ?? process.env.PORT ?? 30178),
+    port: Number(process.env.OMP_WEB_PORT ?? process.env.PORT ?? 6666),
   };
   const args = [
     workerPath ?? "",
