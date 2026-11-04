@@ -63,4 +63,47 @@ describe("EventStreamClient", () => {
     expect(posts).toBeGreaterThanOrEqual(2);
     client.close();
   });
+
+  it("keeps a session channel the server does not manage yet and retries it", async () => {
+    vi.useFakeTimers();
+    try {
+      const attempts: number[] = [];
+      vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          const body = String(init.body ?? "");
+          if (!body.includes('"subscribe"')) return Promise.resolve(new Response(null, { status: 200 }));
+          attempts.push(1);
+          const status = attempts.length === 1 ? 409 : 200;
+          return Promise.resolve(new Response(
+            JSON.stringify({ error: "Session is not managed by omp-web", code: "session_not_managed" }),
+            { status },
+          ));
+        }
+        const body = `event: mux\ndata: ${JSON.stringify({ type: "hello", connectionId: "live" })}\n\n`;
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(body));
+            init?.signal?.addEventListener("abort", () => {
+              controller.error(new DOMException("aborted", "AbortError"));
+            }, { once: true });
+          },
+        });
+        return Promise.resolve(new Response(stream, { status: 200 }));
+      });
+
+      const client = new EventStreamClient();
+      // A 409 is a session without a live omp wrapper, not a dead channel.
+      const unsubscribe = await client.subscribe({ kind: "session", sessionId: "s1" }, () => {});
+      expect(attempts).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(attempts).toHaveLength(2);
+
+      unsubscribe();
+      client.close();
+      expect(attempts).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

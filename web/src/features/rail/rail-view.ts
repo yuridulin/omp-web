@@ -36,6 +36,8 @@ export interface RailViewInput {
   running: ReadonlySet<string>;
   query?: string;
   runningOnly?: boolean;
+  /** Lists sessions marked archived instead of hiding them; off by default. */
+  showArchived?: boolean;
   /**
    * Days of silence after which a conversation moves to its group's `Older`
    * sub-group; `0`/absent keeps everything listed.
@@ -188,6 +190,7 @@ export function buildRailView(input: RailViewInput): RailView {
   }
 
   for (const session of input.sessions) {
+    if (session.archived === true && input.showArchived !== true) continue;
     const root = session.projectRoot ?? session.cwd;
     const key = comparablePath(root);
     let group = drafts.get(key);

@@ -29,6 +29,26 @@ function seed(status: "idle" | "running") {
   });
 }
 
+/** A snapshot mid-turn: a live message is streaming under the run. */
+function seedStreaming(): void {
+  applySnapshotFrame("s1", {
+    type: "snapshot",
+    revision: 7,
+    history: false,
+    snapshot: {
+      ...snapshotWith("running"),
+      session: {
+        ...snapshotWith("running").session,
+        stream: {
+          active: true,
+          message: { role: "assistant", content: [{ type: "thinking", thinking: "half a thought" }] },
+          held: [],
+        },
+      },
+    } as unknown as SessionSnapshot,
+  });
+}
+
 beforeEach(() => {
   resetSessionSnapshots();
   snapshotMock.mockReset();
@@ -47,13 +67,38 @@ describe("useSessionReconcile", () => {
   });
 
   it("clears a stale running run when no process backs the session", async () => {
-    seed("running");
+    seedStreaming();
     snapshotMock.mockResolvedValue({ running: false, snapshot: null });
 
     renderHook(() => useSessionReconcile("s1"));
     await act(async () => {});
 
-    expect(getSessionSnapshot("s1")?.session.run.status).toBe("idle");
+    const session = getSessionSnapshot("s1")?.session;
+    expect(session?.run.status).toBe("idle");
+    // The half-streamed block is never going to finish: no frozen transcript
+    // and no caret blinking over a turn that already ended.
+    expect(session?.stream.active).toBe(false);
+    expect(session?.stream.message).toBeNull();
+  });
+
+  it("re-reads the snapshot while the cached run still claims to be running", async () => {
+    vi.useFakeTimers();
+    try {
+      seed("running");
+      snapshotMock.mockResolvedValue({ running: true, snapshot: snapshotWith("running") });
+
+      renderHook(() => useSessionReconcile("s1"));
+      await act(async () => {});
+      expect(snapshotMock).toHaveBeenCalledTimes(1);
+
+      // A dead pipeline sends no frame to correct the cache; the timer does.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(snapshotMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("re-reads the snapshot when the tab becomes visible again", async () => {

@@ -56,6 +56,7 @@ export const routeModules: Record<string, () => Promise<Record<string, unknown>>
   "system/version/route.ts": () => import("./routes/system/version/route.ts"),
   "system/web-settings/route.ts": () => import("./routes/system/web-settings/route.ts"),
   "workspace/cwd/browse/route.ts": () => import("./routes/workspace/cwd/browse/route.ts"),
+  "workspace/cwd/pick/route.ts": () => import("./routes/workspace/cwd/pick/route.ts"),
   "workspace/cwd/validate/route.ts": () => import("./routes/workspace/cwd/validate/route.ts"),
   "workspace/default-cwd/route.ts": () => import("./routes/workspace/default-cwd/route.ts"),
   "workspace/files/[...path]/route.ts": () => import("./routes/workspace/files/[...path]/route.ts"),

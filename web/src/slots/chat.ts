@@ -41,6 +41,8 @@ export interface ChatSlotProps {
   onAbort: () => void;
   onRemoveQueued: (queue: "steering" | "followUp", text: string) => void;
   onPromoteQueued: (text: string) => void;
+  /** The rail is collapsed; clear the open toggle that sits over the header. */
+  railCollapsed?: boolean;
   /** A drop gesture decoded at the skin boundary. */
   onDropPayload: (payload: DragPayload) => void;
 }

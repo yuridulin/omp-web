@@ -209,6 +209,53 @@ export async function uploadWorkspaceFiles(
   return parseUploadResult(body);
 }
 
+type BrowsePayload = NonNullable<
+  paths["/api/workspace/cwd/browse"]["get"]["responses"][200]["content"]["application/json"]
+>;
+export type DirectoryListing = BrowsePayload;
+export type BrowsableDirectory = DirectoryListing["directories"][number];
+
+/**
+ * Readable subdirectories of the server's filesystem. Without a path the
+ * server picks the start directory (the home folder, or the drive list on
+ * Windows). The browser never sees a path of its own, so this is the only way
+ * to choose a workspace.
+ */
+export async function fetchDirectoryListing(directory?: string): Promise<DirectoryListing> {
+  const { data, error, response } = await api.GET("/api/workspace/cwd/browse", {
+    params: directory ? { query: { path: directory } } : {},
+  });
+  if (error) throw new Error(errorMessage(error, response.status));
+  if (!data) throw new Error("Unexpected empty directory listing");
+  return data;
+}
+
+/** Outcome of the host folder dialog; cancel is not an error. */
+export type FolderPick =
+  | { kind: "picked"; path: string }
+  | { kind: "cancelled" }
+  /** This host cannot show a native dialog; the caller offers its own picker. */
+  | { kind: "unavailable"; reason: string };
+
+/**
+ * Ask the server to show the machine's own folder dialog. A page cannot open
+ * one and never learns an absolute path, so the choice has to happen on the
+ * host that also serves the filesystem.
+ */
+export async function pickNativeFolder(cwd?: string): Promise<FolderPick> {
+  const { data, error, response } = await api.POST("/api/workspace/cwd/pick", {
+    body: cwd ? { cwd } : {},
+  });
+  if (error) {
+    if (response.status === 503) {
+      return { kind: "unavailable", reason: error.error ?? "No native folder dialog on this host" };
+    }
+    throw new Error(errorMessage(error, response.status));
+  }
+  if (!data) throw new Error("Unexpected empty folder dialog response");
+  return data.path ? { kind: "picked", path: data.path } : { kind: "cancelled" };
+}
+
 export async function fetchProjects(): Promise<ProjectSummary[]> {
   const { data, error, response } = await api.GET("/api/workspace/projects");
   if (error) throw new Error(error.error ?? `HTTP ${response.status}`);

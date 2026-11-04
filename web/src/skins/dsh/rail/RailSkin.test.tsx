@@ -151,11 +151,33 @@ describe("rail archive actions", () => {
     expect(onArchiveProject).toHaveBeenCalledWith("/projects/games");
   });
 
-  it("has no archived-sessions toggle in the header", () => {
-    renderRail({ sessions: [session] });
+  it("hides archived sessions until the display settings ask for them", () => {
+    const archivedSession = {
+      ...session,
+      id: "archived-one",
+      name: "Archived session",
+      archived: true,
+    } as SessionSummary;
+    renderRail({ sessions: [session, archivedSession] });
 
-    expect(screen.queryByRole("button", { name: /archived sessions/i })).toBeNull();
-    expect(screen.queryByText("Archived")).toBeNull();
+    expect(screen.queryByText("Archived session")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Session display settings" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Archived sessions" }));
+
+    expect(screen.getByText("Archived session")).toBeTruthy();
+  });
+
+  it("keeps the running filter in the display settings panel", () => {
+    const idle = { ...session, id: "idle-one", name: "Idle session" };
+    const live = { ...session, id: "live-one", name: "Live session" };
+    renderRail({ sessions: [idle, live], running: new Set(["live-one"]) });
+
+    fireEvent.click(screen.getByRole("button", { name: "Session display settings" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Running sessions only" }));
+
+    expect(screen.queryByText("Idle session")).toBeNull();
+    expect(screen.getByText("Live session")).toBeTruthy();
   });
 });
 

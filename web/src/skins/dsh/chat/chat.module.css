@@ -26,6 +26,11 @@
   background: var(--bg);
 }
 
+/* Room for the collapsed rail's `Show sessions` toggle at the top-left. */
+.headerRailCollapsed {
+  padding-left: 48px;
+}
+
 .heading {
   display: flex;
   min-width: 0;

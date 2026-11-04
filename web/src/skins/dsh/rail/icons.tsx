@@ -80,6 +80,16 @@ export function FolderIcon(props: Props) {
   );
 }
 
+/** A folder with a plus inside: "add a workspace folder", not "a folder". */
+export function FolderPlusIcon(props: Props) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h4l2 2.5h6A2.5 2.5 0 0 1 20.5 10v7A2.5 2.5 0 0 1 18 19.5H6A2.5 2.5 0 0 1 3.5 17V7.5Z" />
+      <path d="M12 10.5v5M9.5 13h5" />
+    </Icon>
+  );
+}
+
 export function ChevronIcon(props: Props) {
   return (
     <Icon {...props}>

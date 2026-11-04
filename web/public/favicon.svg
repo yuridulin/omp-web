@@ -1,9 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <style>
-    :root { --tile: #2f6feb; --glyph: #ffffff; }
-    @media (prefers-color-scheme: dark) { :root { --tile: #6ea8fe; --glyph: #17181b; } }
-  </style>
-  <rect width="24" height="24" rx="6" fill="var(--tile)" />
-  <path d="M8 8.25 11.75 12 8 15.75" fill="none" stroke="var(--glyph)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M13 16h4" fill="none" stroke="var(--glyph)" stroke-width="2" stroke-linecap="round" />
+  <!-- omp mark: the Pi glyph on its dark tile, with the orange plugin connector. -->
+  <rect width="24" height="24" rx="6" fill="#0d0d0d"/>
+  <g transform="translate(3.6 5.7) scale(0.14)">
+    <rect x="10" y="8" width="100" height="12" rx="2" fill="#fafafa"/>
+    <rect x="25" y="20" width="12" height="62" rx="2" fill="#fafafa"/>
+    <rect x="75" y="20" width="12" height="45" rx="2" fill="#fafafa"/>
+    <rect x="71" y="55" width="20" height="16" rx="3" fill="#f97316"/>
+    <rect x="76" y="59" width="3" height="8" rx="1" fill="#0d0d0d"/>
+    <rect x="82" y="59" width="3" height="8" rx="1" fill="#0d0d0d"/>
+  </g>
 </svg>

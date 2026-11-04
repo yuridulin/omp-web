@@ -57,6 +57,7 @@ export function ChatSkin({
   onRemoveQueued,
   onPromoteQueued,
   onDropPayload,
+  railCollapsed = false,
 }: ChatSlotProps) {
   const [dropActive, setDropActive] = useState(false);
 
@@ -134,7 +135,7 @@ export function ChatSkin({
 
   return (
     <main className={styles.chat}>
-      <header className={styles.header}>
+      <header className={railCollapsed ? `${styles.header} ${styles.headerRailCollapsed}` : styles.header}>
         <div className={styles.heading}>
           <span className={styles.title}>{title}</span>
           {project !== "" ? <span className={styles.project}>{project}</span> : null}

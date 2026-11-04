@@ -6,6 +6,7 @@ import {
   ChevronIcon,
   FilterIcon,
   FolderIcon,
+  FolderPlusIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -36,10 +37,13 @@ export function RailSkin({
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [runningOnly, setRunningOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [olderOpen, setOlderOpen] = useState<Set<string>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
   const restoreSearchFocus = useRef(false);
 
   useEffect(() => {
@@ -51,6 +55,25 @@ export function RailSkin({
     }
   }, [searchOpen]);
 
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handlePointer = (event: PointerEvent): void => {
+      const target = event.target;
+      if (target instanceof Node && filterRef.current && !filterRef.current.contains(target)) {
+        setFilterOpen(false);
+      }
+    };
+    const handleKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setFilterOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [filterOpen]);
+
   const view = useMemo(
     () =>
       buildRailView({
@@ -59,10 +82,11 @@ export function RailSkin({
         running,
         query,
         runningOnly,
+        showArchived,
         inactiveAfterDays: hideInactiveAfterDays,
         selectedId: selected,
       }),
-    [sessions, projects, running, query, runningOnly, hideInactiveAfterDays, selected],
+    [sessions, projects, running, query, runningOnly, showArchived, hideInactiveAfterDays, selected],
   );
 
   const toggleGroup = (key: string) => {
@@ -126,13 +150,14 @@ export function RailSkin({
   };
 
   const empty = !loading && !error && view.groups.length === 0;
+  const hiddenArchived = !showArchived && sessions.some((item) => item.archived === true);
 
   return (
     <aside className={styles.rail}>
       <header className={styles.header}>
         <span className={styles.brand}>
           <BrandMark size={20} />
-          <span className={styles.brandName}>omp</span>
+          <span className={styles.brandName}>OMP web</span>
         </span>
         {searchOpen ? (
           <div className={styles.searchWrap}>
@@ -170,14 +195,17 @@ export function RailSkin({
             title="Add workspace folder"
             aria-label="Add workspace folder"
           >
-            <FolderIcon size={15} />
+            <FolderPlusIcon size={15} />
           </button>
           {searchOpen ? null : (
             <button
               ref={searchToggleRef}
               type="button"
               className={styles.iconButton}
-              onClick={() => setSearchOpen(true)}
+              onClick={() => {
+                setFilterOpen(false);
+                setSearchOpen(true);
+              }}
               title="Search sessions"
               aria-label="Search sessions"
             >
@@ -185,16 +213,44 @@ export function RailSkin({
             </button>
           )}
           {searchOpen ? null : (
-            <button
-              type="button"
-              className={runningOnly ? `${styles.iconButton} ${styles.iconButtonActive}` : styles.iconButton}
-              onClick={() => setRunningOnly((value) => !value)}
-              title={runningOnly ? "Show all sessions" : "Show running sessions only"}
-              aria-label={runningOnly ? "Show all sessions" : "Show running sessions only"}
-              aria-pressed={runningOnly}
-            >
-              <FilterIcon size={15} />
-            </button>
+            <div className={styles.filterWrap} ref={filterRef}>
+              <button
+                type="button"
+                className={
+                  filterOpen || showArchived || runningOnly
+                    ? `${styles.iconButton} ${styles.iconButtonActive}`
+                    : styles.iconButton
+                }
+                onClick={() => setFilterOpen((value) => !value)}
+                title="Session display settings"
+                aria-label="Session display settings"
+                aria-haspopup="dialog"
+                aria-expanded={filterOpen}
+              >
+                <FilterIcon size={15} />
+              </button>
+              {filterOpen ? (
+                <div className={styles.filterPanel} role="dialog" aria-label="Session display settings">
+                  <span className={styles.filterTitle}>Show</span>
+                  <label className={styles.filterOption}>
+                    <input
+                      type="checkbox"
+                      checked={showArchived}
+                      onChange={(event) => setShowArchived(event.target.checked)}
+                    />
+                    <span>Archived sessions</span>
+                  </label>
+                  <label className={styles.filterOption}>
+                    <input
+                      type="checkbox"
+                      checked={runningOnly}
+                      onChange={(event) => setRunningOnly(event.target.checked)}
+                    />
+                    <span>Running sessions only</span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
           )}
           <button
             type="button"
@@ -302,7 +358,7 @@ export function RailSkin({
 
         {empty ? (
           <p className={styles.muted}>
-            {runningOnly ? "No running sessions" : query.trim() ? "No matching sessions" : "No sessions"}
+            {runningOnly ? "No running sessions" : query.trim() ? "No matching sessions" : hiddenArchived ? "No active sessions" : "No sessions"}
           </p>
         ) : null}
       </div>

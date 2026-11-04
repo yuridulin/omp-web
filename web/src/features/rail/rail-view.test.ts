@@ -264,6 +264,41 @@ describe("buildRailView", () => {
     expect(view.groups[0]?.older[0]?.time).toBe("1w");
   });
 
+  it("keeps archived sessions out unless the display asks for them", () => {
+    const view = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("live", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(2) }),
+        session("archived", {
+          projectRoot: "/work/alpha",
+          archived: true,
+          lastMessageAt: minutesAgo(1),
+        }),
+      ],
+      running: new Set(),
+      now: NOW,
+    });
+
+    expect(view.groups[0]?.sessions.map((item) => item.id)).toEqual(["live"]);
+
+    const withArchived = buildRailView({
+      projects: [project("/work/alpha", { alias: "Alpha" })],
+      sessions: [
+        session("live", { projectRoot: "/work/alpha", lastMessageAt: minutesAgo(2) }),
+        session("archived", {
+          projectRoot: "/work/alpha",
+          archived: true,
+          lastMessageAt: minutesAgo(1),
+        }),
+      ],
+      running: new Set(),
+      showArchived: true,
+      now: NOW,
+    });
+
+    expect(withArchived.groups[0]?.sessions.map((item) => item.id)).toEqual(["archived", "live"]);
+  });
+
   it("keeps every conversation listed when the threshold is off", () => {
     const view = buildRailView({
       projects: [project("/work/alpha", { alias: "Alpha" })],

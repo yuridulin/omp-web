@@ -55,6 +55,14 @@ interface Subscription {
 
 const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 5000;
+/** Retry pace for a channel the server cannot attach yet (no live omp wrapper). */
+const CHANNEL_RETRY_MIN_MS = 2000;
+const CHANNEL_RETRY_MAX_MS = 30_000;
+
+/** 409 `session_not_managed`: no live omp wrapper backs this session right now. */
+function isUnmanagedSession(error: unknown): boolean {
+  return String(error).includes("409");
+}
 
 /**
  * One browser SSE connection, multiplexed by subscription id. Reconnect means:
@@ -70,6 +78,8 @@ export class EventStreamClient {
   #epoch = 0;
   #started = false;
   #closed = false;
+  /** Pending re-subscribe for a channel the server does not manage yet. */
+  readonly #channelRetries = new Map<string, ReturnType<typeof setTimeout>>();
   /** Skip the reconnect backoff once; a 404 means this socket is already dead. */
   #immediate = false;
   #recovering: Promise<void> | null = null;
@@ -89,13 +99,16 @@ export class EventStreamClient {
     try {
       await this.#postSubscription(id);
     } catch (error) {
-      // A 409 means the session has no live wrapper; keep retrying would just
-      // repeat the failure on every reconnect. Network failures stay queued.
-      if (String(error).includes("409")) this.#subscriptions.delete(id);
-      throw error;
+      // A session without a live wrapper is not a failure: it attaches as soon
+      // as omp starts a run for it. Dropping the channel here left an open tab
+      // painting the last streamed frame (blinking caret, no committed end of
+      // the turn) until it was reloaded, because no frame could ever arrive.
+      if (!isUnmanagedSession(error)) throw error;
+      this.#scheduleChannelRetry(id, CHANNEL_RETRY_MIN_MS);
     }
     return () => {
       this.#subscriptions.delete(id);
+      this.#cancelChannelRetry(id);
       if (this.#connectionId) void this.#post({ unsubscribe: id }).catch(() => {});
     };
   }
@@ -105,6 +118,8 @@ export class EventStreamClient {
     this.#controller.abort();
     this.#socket.abort();
     this.#ready.reject(new DOMException("The event stream was closed", "AbortError"));
+    for (const timer of this.#channelRetries.values()) clearTimeout(timer);
+    this.#channelRetries.clear();
     this.#subscriptions.clear();
   }
 
@@ -173,11 +188,38 @@ export class EventStreamClient {
     for (const [id, subscription] of this.#subscriptions) {
       try {
         await this.#post({ subscribe: { id, channel: subscription.channel } });
+        this.#cancelChannelRetry(id);
       } catch {
         // One invalid channel must not block the others; the next hello retries.
         continue;
       }
     }
+  }
+
+  #cancelChannelRetry(id: string): void {
+    const timer = this.#channelRetries.get(id);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    this.#channelRetries.delete(id);
+  }
+
+  /** Re-attach a channel the server refused; a live wrapper appears on the next run. */
+  #scheduleChannelRetry(id: string, delay: number): void {
+    if (this.#closed || this.#channelRetries.has(id) || !this.#subscriptions.has(id)) return;
+    const timer = setTimeout(() => {
+      this.#channelRetries.delete(id);
+      if (this.#closed || !this.#subscriptions.has(id)) return;
+      void this.#postSubscription(id).then(
+        () => {},
+        (error: unknown) => {
+          this.#scheduleChannelRetry(
+            id,
+            isUnmanagedSession(error) ? Math.min(CHANNEL_RETRY_MAX_MS, delay * 2) : CHANNEL_RETRY_MIN_MS,
+          );
+        },
+      );
+    }, delay);
+    this.#channelRetries.set(id, timer);
   }
 
   async #postSubscription(id: string): Promise<void> {

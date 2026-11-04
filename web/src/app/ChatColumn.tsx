@@ -28,6 +28,7 @@ import { useListedSession } from "@/state/session-catalog";
 import type { SessionSummary } from "@/api/workspace";
 import { bumpStreamGeneration, useStreamGeneration } from "@/state/stream-generation";
 import { useAppearance } from "@/state/use-appearance";
+import { useLayoutField } from "@/layout/use-layout";
 import { useSessionSnapshot } from "@/state/use-session-snapshot";
 
 const EMPTY_MODELS: ModelEntry[] = [];
@@ -198,6 +199,7 @@ export function ChatColumn({
     setExtensionError(null);
   }, [extensionRequestId]);
   const ChatSkin = skinFor("chat", appearance);
+  const railCollapsed = useLayoutField("railCollapsed");
   const agentRunning = snapshot?.session.run.status === "running";
 
   const handleExtensionResponse = async (response: ExtensionResponse): Promise<void> => {
@@ -329,6 +331,7 @@ export function ChatColumn({
         if (payload.kind !== "file") return;
         appendComposerDraft(selected ?? NEW_SESSION_DRAFT_ID, payload.path);
       }}
+      railCollapsed={railCollapsed}
     />
   );
 }

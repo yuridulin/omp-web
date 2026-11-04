@@ -10,6 +10,9 @@ import { applySubagentsFrame, setSubagentsStreamError } from "./subagents-store"
 
 const EventStreamContext = createContext<EventStreamClient | null>(null);
 
+/** How often a cached "running" snapshot is re-read while no frames arrive. */
+const RUN_RECONCILE_INTERVAL_MS = 10_000;
+
 export function EventStreamProvider({ children }: { children: ReactNode }) {
   const [client, setClient] = useState<EventStreamClient | null>(null);
   useEffect(() => {
@@ -146,7 +149,13 @@ export function useSessionReconcile(sessionId: string | null, revision = 0): voi
             history: false,
             snapshot: {
               ...previous,
-              session: { ...previous.session, run: { ...previous.session.run, status: "idle" } },
+              session: {
+                ...previous.session,
+                run: { ...previous.session.run, status: "idle" },
+                // Nothing will finish that half-streamed block: drop it instead
+                // of leaving a caret blinking over a turn that already ended.
+                stream: { ...previous.session.stream, active: false, message: null },
+              },
             },
           });
         })
@@ -155,6 +164,12 @@ export function useSessionReconcile(sessionId: string | null, revision = 0): voi
         });
     };
     refresh();
+    // A run that outlives its pipeline (server restart, dropped wrapper) would
+    // otherwise leave the cached snapshot claiming a stream forever: no frame
+    // arrives to correct it, and the committed end of the turn stays invisible.
+    const timer = setInterval(() => {
+      if (getSessionSnapshot(sessionId)?.session.run.status === "running") refresh();
+    }, RUN_RECONCILE_INTERVAL_MS);
     const onVisibility = (): void => {
       if (document.visibilityState === "visible") refresh();
     };
@@ -162,6 +177,7 @@ export function useSessionReconcile(sessionId: string | null, revision = 0): voi
     window.addEventListener("focus", refresh);
     return () => {
       cancelled = true;
+      clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", refresh);
     };

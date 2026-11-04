@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { archiveSession } from "@/api/agent";
 import { rootForPath } from "@/api/paths";
 import type { SessionSummary } from "@/api/workspace";
-import { pickBrowserFolder } from "@/features/rail/pick-workspace-folder";
-import { archiveProject, registerProject } from "@/api/workspace";
+import { archiveProject, pickNativeFolder, registerProject } from "@/api/workspace";
 import { useProjects } from "@/features/projects/use-projects";
+import { WorkspacePicker } from "@/features/projects/WorkspacePicker";
 import { useSessions } from "@/features/sessions/use-sessions";
 import { useUnseenSessions } from "@/features/sessions/use-unseen-sessions";
 import { useWebSettings } from "@/features/system/use-system-config";
@@ -20,6 +20,7 @@ import { useRunningSessions } from "@/state/event-stream";
 import styles from "./app.module.css";
 
 const EMPTY_RUNNING: string[] = [];
+const EMPTY_SESSIONS: SessionSummary[] = [];
 
 interface RailColumnProps {
   selected: string | null;
@@ -47,14 +48,16 @@ export function RailColumn({
   const sessions = useSessions();
   const projects = useProjects();
   const webSettings = useWebSettings();
-  const [addError, setAddError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerNotice, setPickerNotice] = useState<string | null>(null);
   const adding = useRef(false);
   const fallbackRunning = sessions.data?.runningSessionIds ?? EMPTY_RUNNING;
   const running = useRunningSessions(fallbackRunning);
+  const allSessions = sessions.data?.sessions ?? EMPTY_SESSIONS;
   const visibleSessions = useMemo(
-    () => (sessions.data?.sessions ?? []).filter((session) => !session.archived),
-    [sessions.data],
+    () => allSessions.filter((session) => !session.archived),
+    [allSessions],
   );
   const unseen = useUnseenSessions(visibleSessions, running, selected);
   const RailSkin = skinFor("rail", appearance);
@@ -82,8 +85,8 @@ export function RailColumn({
   }, [selected, draftCwd, projects.data]);
 
   const listedSessions = useMemo(
-    () => (draft ? [draft, ...visibleSessions] : visibleSessions),
-    [draft, visibleSessions],
+    () => (draft ? [draft, ...allSessions] : allSessions),
+    [draft, allSessions],
   );
 
   const refreshAfterArchive = async (): Promise<void> => {
@@ -143,7 +146,7 @@ export function RailColumn({
           unseen={unseen}
           hideInactiveAfterDays={webSettings.data?.hideInactiveSessionsAfterDays ?? DEFAULT_INACTIVE_SESSION_DAYS}
           loading={sessions.isLoading}
-          error={actionError ?? addError ?? (sessions.isError ? sessions.error.message : null)}
+          error={actionError ?? (sessions.isError ? sessions.error.message : null)}
           onSelect={(sessionId) => {
             if (draft && sessionId === draft.id) return;
             onSelect(sessionId);
@@ -160,15 +163,21 @@ export function RailColumn({
           onAddWorkspace={() => {
             if (adding.current) return;
             adding.current = true;
-            setAddError(null);
-            void pickBrowserFolder()
-              .then(async (path) => {
-                if (!path) return;
-                await registerProject(path);
+            setActionError(null);
+            void pickNativeFolder(draftCwd ?? undefined)
+              .then(async (pick) => {
+                if (pick.kind === "unavailable") {
+                  // Headless host or no GUI toolkit: fall back to the server's file listing.
+                  setPickerNotice(`${pick.reason} — choose a folder from the server's filesystem instead.`);
+                  setPickerOpen(true);
+                  return;
+                }
+                if (pick.kind !== "picked") return;
+                await registerProject(pick.path);
                 await projects.refetch();
               })
               .catch((cause: unknown) => {
-                setAddError(cause instanceof Error ? cause.message : "Unable to add this folder");
+                setActionError(cause instanceof Error ? cause.message : "Unable to add this workspace");
               })
               .finally(() => {
                 adding.current = false;
@@ -176,6 +185,17 @@ export function RailColumn({
           }}
         />
       </div>
+      {pickerOpen ? (
+        <WorkspacePicker
+          {...(pickerNotice ? { notice: pickerNotice } : {})}
+          onClose={() => setPickerOpen(false)}
+          onChoose={async (path) => {
+            await registerProject(path);
+            await projects.refetch();
+            setPickerOpen(false);
+          }}
+        />
+      ) : null}
       <ResizeHandle
         label="Resize session rail"
         onDelta={(delta) => updateLayout({ railWidth: getLayout().railWidth + delta })}

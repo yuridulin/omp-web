@@ -1,6 +1,7 @@
 import type { ProjectSummary, SessionSummary } from "@/api/workspace";
 
 export interface RailSlotProps {
+  /** Every session, archived included; the skin hides archived by default. */
   sessions: SessionSummary[];
   projects: ProjectSummary[];
   selected: string | null;
@@ -18,7 +19,7 @@ export interface RailSlotProps {
   onRefresh: () => void;
   onCollapse: () => void;
   onOpenSettings: () => void;
-  /** Opens the browser folder dialog and registers the chosen directory. */
+  /** Opens the workspace picker over the server's filesystem. */
   onAddWorkspace: () => void;
   /** Marks the session archived; the open chat keeps running and stays open. */
   onArchiveSession: (sessionId: string) => void;
