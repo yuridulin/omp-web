@@ -147,7 +147,7 @@ export function App() {
         <RailColumn
           selected={selected}
           draftCwd={draftCwd}
-          pendingId={pendingSession?.id ?? null}
+          pendingSession={pendingSummary}
           onPendingListed={onPendingListed}
           onSelect={selectSession}
           onNewSession={openNewSession}

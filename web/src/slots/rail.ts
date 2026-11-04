@@ -5,7 +5,10 @@ export interface RailSlotProps {
   sessions: SessionSummary[];
   projects: ProjectSummary[];
   selected: string | null;
-  /** The unsaved chat row; it cannot be archived and is already the active one. */
+  /**
+   * A row the server list does not carry yet: the unsaved chat, or a session
+   * created moments ago whose file omp has not written. It cannot be archived.
+   */
   draftId: string | null;
   running: ReadonlySet<string>;
   /** Finished sessions with unseen messages; painted as a dot until opened. */

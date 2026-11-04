@@ -26,7 +26,11 @@ interface RailColumnProps {
   selected: string | null;
   /** Workspace of the unsaved chat, shown as a draft row while it has no session. */
   draftCwd: string | null;
-  pendingId: string | null;
+  /**
+   * A session created moments ago. omp writes the session file on the first
+   * message, so the polled list can trail it; the rail paints it until then.
+   */
+  pendingSession: SessionSummary | null;
   onPendingListed: () => void;
   onSelect: (sessionId: string) => void;
   onNewSession: (projectPath?: string) => void;
@@ -36,7 +40,7 @@ interface RailColumnProps {
 export function RailColumn({
   selected,
   draftCwd,
-  pendingId,
+  pendingSession,
   onPendingListed,
   onSelect,
   onNewSession,
@@ -84,9 +88,17 @@ export function RailColumn({
     };
   }, [selected, draftCwd, projects.data]);
 
+  const pending = useMemo<SessionSummary | null>(() => {
+    if (!pendingSession) return null;
+    // The server list is authoritative once it carries the id; until then the
+    // locally known row keeps the new session visible in the tree.
+    if (allSessions.some((session) => session.id === pendingSession.id)) return null;
+    return pendingSession;
+  }, [pendingSession, allSessions]);
+
   const listedSessions = useMemo(
-    () => (draft ? [draft, ...allSessions] : allSessions),
-    [draft, allSessions],
+    () => (draft ? [draft, ...allSessions] : pending ? [pending, ...allSessions] : allSessions),
+    [draft, pending, allSessions],
   );
 
   const refreshAfterArchive = async (): Promise<void> => {
@@ -116,9 +128,9 @@ export function RailColumn({
   }, [sessions.data, projects.data]);
 
   useEffect(() => {
-    if (!pendingId) return;
-    if (sessions.data?.sessions.some((item) => item.id === pendingId)) onPendingListed();
-  }, [pendingId, sessions.data, onPendingListed]);
+    if (!pendingSession) return;
+    if (sessions.data?.sessions.some((item) => item.id === pendingSession.id)) onPendingListed();
+  }, [pendingSession, sessions.data, onPendingListed]);
 
   if (collapsed) {
     return (
@@ -141,7 +153,7 @@ export function RailColumn({
           sessions={listedSessions}
           projects={projects.data ?? []}
           selected={selected ?? draft?.id ?? null}
-          draftId={draft?.id ?? null}
+          draftId={draft?.id ?? pending?.id ?? null}
           running={running}
           unseen={unseen}
           hideInactiveAfterDays={webSettings.data?.hideInactiveSessionsAfterDays ?? DEFAULT_INACTIVE_SESSION_DAYS}
@@ -149,6 +161,7 @@ export function RailColumn({
           error={actionError ?? (sessions.isError ? sessions.error.message : null)}
           onSelect={(sessionId) => {
             if (draft && sessionId === draft.id) return;
+            if (pending && sessionId === pending.id) return;
             onSelect(sessionId);
           }}
           onNewSession={onNewSession}
